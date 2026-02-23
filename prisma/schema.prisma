@@ -1,0 +1,266 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  authId       String   @unique
+  email        String   @unique
+  name         String
+  avatar       String   @default("🎮")
+  country      String   @default("🇦🇷")
+  countryName  String   @default("Argentina")
+  xp           Int      @default(0)
+  coins        Int      @default(100)
+  referralCode String?  @unique
+  referredById String?
+  createdAt    DateTime @default(now())
+
+  referredBy User?  @relation("UserReferrals", fields: [referredById], references: [id])
+  referrals  User[] @relation("UserReferrals")
+
+  predictions       Prediction[]
+  memberships       GroupMember[]
+  contributions     PoolContribution[]
+  xpEvents          XpEvent[]
+  notifications     Notification[]
+  activityEvents    ActivityEvent[]
+  badges            UserBadge[]
+  boosters          UserBooster[]
+  coinTransactions  CoinTransaction[]
+  pushSubscriptions PushSubscription[]
+}
+
+model Tournament {
+  id        String          @id @default(uuid())
+  name      String
+  type      TournamentType  @default(WORLD_CUP)
+  phase     TournamentPhase @default(GROUP_STAGE)
+  startDate DateTime
+  endDate   DateTime
+  active    Boolean         @default(true)
+  createdAt DateTime        @default(now())
+
+  matches Match[]
+  groups  Group[]
+}
+
+enum TournamentType {
+  WORLD_CUP
+  COPA_AMERICA
+  CHAMPIONS_LEAGUE
+  LIBERTADORES
+  LEAGUE
+  OTHER
+}
+
+enum TournamentPhase {
+  GROUP_STAGE
+  ROUND_OF_16
+  QUARTER_FINALS
+  SEMI_FINALS
+  FINAL
+}
+
+model Match {
+  id           String          @id @default(uuid())
+  tournamentId String
+  teamACode    String
+  teamAName    String
+  teamAFlag    String
+  teamBCode    String
+  teamBName    String
+  teamBFlag    String
+  matchDate    DateTime
+  matchGroup   String?
+  phase        TournamentPhase @default(GROUP_STAGE)
+  status       MatchStatus     @default(UPCOMING)
+  scoreA       Int?
+  scoreB       Int?
+  reminderSent Boolean         @default(false)
+
+  tournament  Tournament   @relation(fields: [tournamentId], references: [id])
+  predictions Prediction[]
+  xpEvents    XpEvent[]
+
+  @@index([tournamentId, status])
+  @@index([matchDate])
+}
+
+enum MatchStatus {
+  UPCOMING
+  LIVE
+  FINISHED
+}
+
+model Prediction {
+  id             String   @id @default(uuid())
+  userId         String
+  matchId        String
+  scoreA         Int
+  scoreB         Int
+  points         Int      @default(0)
+  boosterApplied String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user  User  @relation(fields: [userId], references: [id])
+  match Match @relation(fields: [matchId], references: [id])
+
+  @@unique([userId, matchId])
+  @@index([userId])
+}
+
+model Group {
+  id               String   @id @default(uuid())
+  name             String
+  emoji            String   @default("🏆")
+  tournamentId     String
+  createdById      String
+  inviteCode       String   @unique @default(uuid())
+  hasPool          Boolean  @default(false)
+  entryFee         Int      @default(0)
+  poolDistribution Int[]    @default([50, 30, 20])
+  currency         String   @default("ARS")
+  createdAt        DateTime @default(now())
+
+  tournament     Tournament         @relation(fields: [tournamentId], references: [id])
+  members        GroupMember[]
+  contributions  PoolContribution[]
+  activityEvents ActivityEvent[]
+
+  @@index([inviteCode])
+  @@index([tournamentId])
+}
+
+model GroupMember {
+  id       String    @id @default(uuid())
+  userId   String
+  groupId  String
+  role     GroupRole @default(MEMBER)
+  joinedAt DateTime  @default(now())
+
+  user  User  @relation(fields: [userId], references: [id])
+  group Group @relation(fields: [groupId], references: [id])
+
+  @@unique([userId, groupId])
+}
+
+enum GroupRole {
+  ADMIN
+  MEMBER
+}
+
+model PoolContribution {
+  id      String    @id @default(uuid())
+  userId  String
+  groupId String
+  amount  Int
+  paid    Boolean   @default(false)
+  paidAt  DateTime?
+
+  user  User  @relation(fields: [userId], references: [id])
+  group Group @relation(fields: [groupId], references: [id])
+
+  @@unique([userId, groupId])
+}
+
+model XpEvent {
+  id        String   @id @default(uuid())
+  userId    String
+  amount    Int
+  reason    String
+  matchId   String?
+  createdAt DateTime @default(now())
+
+  user  User   @relation(fields: [userId], references: [id])
+  match Match? @relation(fields: [matchId], references: [id])
+
+  @@index([userId])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  type      String
+  title     String
+  body      String
+  icon      String   @default("🔔")
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
+}
+
+model ActivityEvent {
+  id        String   @id @default(uuid())
+  groupId   String
+  userId    String
+  type      String
+  text      String
+  icon      String
+  createdAt DateTime @default(now())
+
+  group Group @relation(fields: [groupId], references: [id])
+  user  User  @relation(fields: [userId], references: [id])
+
+  @@index([groupId, createdAt])
+}
+
+model UserBadge {
+  id       String   @id @default(uuid())
+  userId   String
+  badgeId  String
+  earnedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, badgeId])
+  @@index([userId])
+}
+
+model UserBooster {
+  id       String @id @default(uuid())
+  userId   String
+  type     String
+  quantity Int    @default(1)
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, type])
+}
+
+model CoinTransaction {
+  id        String   @id @default(uuid())
+  userId    String
+  amount    Int
+  reason    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
