@@ -120,8 +120,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
           }
         } catch (err) {
           console.error("Auth fetch error:", err);
+          // On 404 go to setup, on other errors show login
           setScreen("setup");
         }
+      } else {
+        // No session, go past splash
+        setScreen("login");
       }
       setAuthLoading(false);
     }).catch((err) => {
