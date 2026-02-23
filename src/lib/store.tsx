@@ -118,10 +118,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
           } else {
             setScreen("setup");
           }
-        } catch {
+        } catch (err) {
+          console.error("Auth fetch error:", err);
           setScreen("setup");
         }
       }
+      setAuthLoading(false);
+    }).catch((err) => {
+      console.error("Supabase getSession error:", err);
       setAuthLoading(false);
     });
 
