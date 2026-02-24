@@ -597,20 +597,29 @@ export function useGroupChat(groupId: string | null, active: boolean) {
 
   // Poll for new messages
   const poll = useCallback(async (gId: string) => {
-    if (!cursorRef.current) return;
     try {
-      const res = await authFetch(`/api/groups/${gId}/chat?after=${cursorRef.current}`);
+      // If we have a cursor, fetch only newer messages; otherwise fetch latest
+      const url = cursorRef.current
+        ? `/api/groups/${gId}/chat?after=${cursorRef.current}`
+        : `/api/groups/${gId}/chat`;
+      const res = await authFetch(url);
       if (!res.ok) return;
       const data = await res.json();
       const newMsgs: ChatMessageItem[] = data.messages || [];
       if (newMsgs.length > 0) {
-        setMessages((prev) => {
-          const nonPending = prev.filter((m) => !m.pending);
-          const stillPending = prev.filter(
-            (m) => m.pending && !newMsgs.some((nm) => nm.content === m.content && nm.userId === m.userId),
-          );
-          return [...nonPending, ...newMsgs, ...stillPending];
-        });
+        if (cursorRef.current) {
+          // Append new messages, replacing optimistic ones
+          setMessages((prev) => {
+            const nonPending = prev.filter((m) => !m.pending);
+            const stillPending = prev.filter(
+              (m) => m.pending && !newMsgs.some((nm) => nm.content === m.content && nm.userId === m.userId),
+            );
+            return [...nonPending, ...newMsgs, ...stillPending];
+          });
+        } else {
+          // First messages arriving in an empty chat
+          setMessages(newMsgs);
+        }
         cursorRef.current = newMsgs[newMsgs.length - 1].id;
       }
     } catch {
