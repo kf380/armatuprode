@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/supabase-server";
+import { creditCoins } from "@/lib/wallet";
+import { WalletLotSource } from "@prisma/client";
 
 export async function GET(request: NextRequest) {
   const { user } = await getAuthUser(request);
@@ -77,6 +79,24 @@ export async function POST(request: NextRequest) {
     where: { id: dbUser.id },
     data: { xp: { increment: 10 } },
   });
+
+  // +100 coins for referrer
+  creditCoins({
+    userId: referrer.id,
+    amount: 100,
+    source: WalletLotSource.REFERRAL,
+    reason: "referral_bonus",
+    idempotencyKey: `coin_referral_${referrer.id}_${dbUser.id}`,
+  }).catch(() => {});
+
+  // +100 coins for referred user
+  creditCoins({
+    userId: dbUser.id,
+    amount: 100,
+    source: WalletLotSource.REFERRAL,
+    reason: "referred_bonus",
+    idempotencyKey: `coin_referred_${dbUser.id}_${referrer.id}`,
+  }).catch(() => {});
 
   return NextResponse.json({ ok: true });
 }

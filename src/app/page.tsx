@@ -16,6 +16,7 @@ import JoinGroupScreen from "@/components/screens/JoinGroupScreen";
 import LiveMatchScreen from "@/components/screens/LiveMatchScreen";
 import ShopScreen from "@/components/screens/ShopScreen";
 import NotificationsScreen from "@/components/screens/NotificationsScreen";
+import RulesScreen from "@/components/screens/RulesScreen";
 
 function DeepLinkHandler() {
   const { isLoggedIn, setScreen, authLoading } = useApp();
@@ -73,6 +74,7 @@ function AppContent() {
   if (screen === "live-match") return <LiveMatchScreen />;
   if (screen === "shop") return <ShopScreen />;
   if (screen === "notifications") return <NotificationsScreen />;
+  if (screen === "rules") return <RulesScreen />;
 
   // Main app with tab bar
   return (

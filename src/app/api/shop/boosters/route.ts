@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/supabase-server";
+import { getWalletBalance } from "@/lib/wallet";
 
 export async function GET(request: NextRequest) {
   const { user } = await getAuthUser(request);
@@ -22,5 +23,7 @@ export async function GET(request: NextRequest) {
     inventory[b.type] = b.quantity;
   }
 
-  return NextResponse.json({ boosters: inventory, coins: dbUser.coins });
+  const { expiringIn7Days } = await getWalletBalance(dbUser.id);
+
+  return NextResponse.json({ boosters: inventory, coins: dbUser.coins, expiringIn7Days });
 }

@@ -28,6 +28,21 @@ export async function createNotification(params: {
   return notif;
 }
 
+export async function createChatSystemEvent(
+  groupId: string,
+  text: string,
+  icon: string = "⚡",
+) {
+  return prisma.chatMessage.create({
+    data: {
+      groupId,
+      userId: null,
+      type: "SYSTEM",
+      content: `${icon} ${text}`,
+    },
+  });
+}
+
 export async function createActivityEvent(params: {
   groupId: string;
   userId: string;

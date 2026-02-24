@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, AlertTriangle, Minus, Plus, X, Sparkles, Loader2 } from "lucide-react";
 import { useApp } from "@/lib/store";
-import { useMatches } from "@/lib/hooks";
+import { useMatches, ScreenMatch } from "@/lib/hooks";
 import { sharePrediction, shareExactResult } from "@/lib/share";
 import ShareButton from "@/components/ShareButton";
 import { matches as mockMatches } from "@/lib/mock-data";
@@ -24,6 +24,7 @@ interface Prediction {
   matchId: string;
   scoreA: number;
   scoreB: number;
+  predictedQualifier?: string | null;
 }
 
 export default function MatchesScreen() {
@@ -34,13 +35,21 @@ export default function MatchesScreen() {
   const [editingMatch, setEditingMatch] = useState<string | null>(null);
   const [tempScoreA, setTempScoreA] = useState(0);
   const [tempScoreB, setTempScoreB] = useState(0);
+  const [tempQualifier, setTempQualifier] = useState<string | null>(null);
   const [savedAnimation, setSavedAnimation] = useState<string | null>(null);
   const [sharePrompt, setSharePrompt] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   // Use API data, fallback to mock if error
-  const matches = useMemo(() => {
-    if (error || (apiMatches.length === 0 && !loading)) return mockMatches;
+  const matches: ScreenMatch[] = useMemo(() => {
+    if (error || (apiMatches.length === 0 && !loading)) {
+      return mockMatches.map((m) => ({
+        ...m,
+        phase: "GROUP_STAGE",
+        qualifiedTeam: null,
+        userPrediction: m.userPrediction ? { ...m.userPrediction, predictedQualifier: null } : null,
+      }));
+    }
     return apiMatches;
   }, [apiMatches, loading, error]);
 
@@ -56,6 +65,7 @@ export default function MatchesScreen() {
     const match = matches.find((m) => m.id === matchId);
     setTempScoreA(existing?.scoreA ?? match?.userPrediction?.scoreA ?? 0);
     setTempScoreB(existing?.scoreB ?? match?.userPrediction?.scoreB ?? 0);
+    setTempQualifier(existing?.predictedQualifier ?? match?.userPrediction?.predictedQualifier ?? null);
     setEditingMatch(matchId);
   };
 
@@ -68,7 +78,12 @@ export default function MatchesScreen() {
       const res = await authFetch("/api/predictions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ matchId: editingMatch, scoreA: tempScoreA, scoreB: tempScoreB }),
+        body: JSON.stringify({
+          matchId: editingMatch,
+          scoreA: tempScoreA,
+          scoreB: tempScoreB,
+          ...(match?.phase !== "GROUP_STAGE" && tempQualifier ? { predictedQualifier: tempQualifier } : {}),
+        }),
       });
 
       if (!res.ok) {
@@ -84,7 +99,7 @@ export default function MatchesScreen() {
 
     setPredictions((prev) => ({
       ...prev,
-      [editingMatch]: { matchId: editingMatch, scoreA: tempScoreA, scoreB: tempScoreB },
+      [editingMatch]: { matchId: editingMatch, scoreA: tempScoreA, scoreB: tempScoreB, predictedQualifier: tempQualifier },
     }));
     setSavedAnimation(editingMatch);
     setEditingMatch(null);
@@ -308,20 +323,23 @@ export default function MatchesScreen() {
                   </div>
                 </div>
                 <div className="mt-2 flex items-center justify-between border-t border-border-default pt-2">
-                  <span className="text-xs text-text-muted">
-                    Tu prediccion: {match.userPrediction?.scoreA}-{match.userPrediction?.scoreB}
-                  </span>
+                  <div className="text-xs text-text-muted">
+                    <div>Tu prediccion: {match.userPrediction?.scoreA}-{match.userPrediction?.scoreB}</div>
+                    {match.qualifiedTeam && (
+                      <div className="mt-0.5">Clasifico: <strong>{match.qualifiedTeam}</strong></div>
+                    )}
+                  </div>
                   {match.pointsEarned !== undefined && (
                     <span
                       className={`font-display text-xs font-bold px-2.5 py-0.5 rounded-full ${
-                        match.pointsEarned === 3
+                        match.pointsEarned >= 5
                           ? "bg-accent/20 text-accent"
-                          : match.pointsEarned === 1
+                          : match.pointsEarned >= 1
                           ? "bg-primary/20 text-primary"
                           : "bg-danger/20 text-danger"
                       }`}
                     >
-                      {match.pointsEarned === 3 ? "🎯 EXACTO +3" : match.pointsEarned === 1 ? "✅ +1" : "❌ 0"}
+                      {match.pointsEarned >= 5 ? `🎯 EXACTO +${match.pointsEarned}` : match.pointsEarned >= 1 ? `✅ +${match.pointsEarned}` : "❌ 0"}
                     </span>
                   )}
                 </div>
@@ -427,12 +445,53 @@ export default function MatchesScreen() {
                       </div>
                     </div>
 
+                    {/* Knockout qualifier selector */}
+                    {match.phase !== "GROUP_STAGE" && (
+                      <div className="rounded-xl border border-border-default bg-bg-primary p-3 mb-4">
+                        <div className="text-xs text-text-muted mb-2 font-display tracking-wider">QUIEN CLASIFICA?</div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setTempQualifier(match.teamA.code)}
+                            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg border font-display text-xs font-bold transition-all ${
+                              tempQualifier === match.teamA.code
+                                ? "border-primary bg-primary/10 text-primary"
+                                : "border-border-default text-text-muted hover:border-text-muted/30"
+                            }`}
+                          >
+                            <span>{match.teamA.flag}</span> {match.teamA.code}
+                          </button>
+                          <button
+                            onClick={() => setTempQualifier(match.teamB.code)}
+                            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg border font-display text-xs font-bold transition-all ${
+                              tempQualifier === match.teamB.code
+                                ? "border-primary bg-primary/10 text-primary"
+                                : "border-border-default text-text-muted hover:border-text-muted/30"
+                            }`}
+                          >
+                            <span>{match.teamB.flag}</span> {match.teamB.code}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="rounded-xl border border-border-default bg-bg-primary p-3 mb-4">
                       <div className="text-xs text-text-muted mb-1">Puntos posibles:</div>
-                      <div className="flex justify-between text-xs">
-                        <span>🎯 Resultado exacto: <strong className="text-accent">+3 pts</strong></span>
-                        <span>✅ Ganador correcto: <strong className="text-primary">+1 pt</strong></span>
-                      </div>
+                      {match.phase === "GROUP_STAGE" ? (
+                        <div className="flex justify-between text-xs">
+                          <span>🎯 Resultado exacto: <strong className="text-accent">+3 pts</strong></span>
+                          <span>✅ Ganador correcto: <strong className="text-primary">+1 pt</strong></span>
+                        </div>
+                      ) : (
+                        <div className="space-y-1 text-xs">
+                          <div className="flex justify-between">
+                            <span>🎯 Exacto (90&apos;): <strong className="text-accent">+5 pts</strong></span>
+                            <span>✅ Ganador (90&apos;): <strong className="text-primary">+2 pts</strong></span>
+                          </div>
+                          <div>
+                            <span>🏆 Clasificado correcto: <strong className="text-secondary">+3 pts</strong></span>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <button

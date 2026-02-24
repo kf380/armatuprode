@@ -44,7 +44,8 @@ export interface ApiMatch {
   status: "UPCOMING" | "LIVE" | "FINISHED";
   scoreA: number | null;
   scoreB: number | null;
-  prediction: { scoreA: number; scoreB: number; points: number } | null;
+  qualifiedTeam: string | null;
+  prediction: { scoreA: number; scoreB: number; points: number; predictedQualifier?: string | null } | null;
 }
 
 export interface ScreenMatch {
@@ -54,10 +55,12 @@ export interface ScreenMatch {
   date: string;
   time: string;
   group: string;
+  phase: string;
   status: "upcoming" | "finished" | "live";
   scoreA?: number;
   scoreB?: number;
-  userPrediction: { scoreA: number; scoreB: number } | null;
+  qualifiedTeam?: string | null;
+  userPrediction: { scoreA: number; scoreB: number; predictedQualifier?: string | null } | null;
   pointsEarned?: number;
 }
 
@@ -148,8 +151,12 @@ function apiToScreenMatch(m: ApiMatch): ScreenMatch {
     date,
     time,
     group: m.matchGroup || m.phase,
+    phase: m.phase,
     status: m.status === "UPCOMING" ? "upcoming" : m.status === "FINISHED" ? "finished" : "live",
-    userPrediction: m.prediction ? { scoreA: m.prediction.scoreA, scoreB: m.prediction.scoreB } : null,
+    qualifiedTeam: m.qualifiedTeam,
+    userPrediction: m.prediction
+      ? { scoreA: m.prediction.scoreA, scoreB: m.prediction.scoreB, predictedQualifier: m.prediction.predictedQualifier }
+      : null,
   };
 
   if (m.status === "FINISHED" || m.status === "LIVE") {
@@ -540,6 +547,214 @@ export function useLiveMatches(pollInterval = 30000) {
   }, [fetchLive, pollInterval]);
 
   return { matches, loading, refetch: fetchLive };
+}
+
+// --- Chat types ---
+
+export interface ChatMessageItem {
+  id: string;
+  type: "TEXT" | "STICKER" | "SYSTEM";
+  content: string;
+  stickerKey: string | null;
+  deleted: boolean;
+  userId: string | null;
+  user: { id: string; name: string; avatar: string } | null;
+  createdAt: string;
+  pending?: boolean;
+}
+
+export function useGroupChat(groupId: string | null, active: boolean) {
+  const { authFetch, dbUser } = useApp();
+  const [messages, setMessages] = useState<ChatMessageItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [hasOlder, setHasOlder] = useState(true);
+  const cursorRef = useRef<string | null>(null);
+  const initializedRef = useRef(false);
+
+  // Initial load
+  const loadInitial = useCallback(async (gId: string) => {
+    try {
+      setLoading(true);
+      const res = await authFetch(`/api/groups/${gId}/chat`);
+      if (!res.ok) throw new Error("Failed to load chat");
+      const data = await res.json();
+      const msgs: ChatMessageItem[] = data.messages || [];
+      setMessages(msgs);
+      if (msgs.length > 0) {
+        cursorRef.current = msgs[msgs.length - 1].id;
+      }
+      setHasOlder(msgs.length >= 20);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error");
+    } finally {
+      setLoading(false);
+    }
+  }, [authFetch]);
+
+  // Poll for new messages
+  const poll = useCallback(async (gId: string) => {
+    if (!cursorRef.current) return;
+    try {
+      const res = await authFetch(`/api/groups/${gId}/chat?after=${cursorRef.current}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const newMsgs: ChatMessageItem[] = data.messages || [];
+      if (newMsgs.length > 0) {
+        setMessages((prev) => {
+          // Remove optimistic messages that are now confirmed
+          const pendingIds = new Set(prev.filter((m) => m.pending).map((m) => m.id));
+          const confirmed = newMsgs.filter((m) => !pendingIds.has(m.id));
+          const stillPending = prev.filter((m) => !m.pending || !newMsgs.some((nm) => nm.content === m.content && nm.userId === m.userId));
+          const nonPending = prev.filter((m) => !m.pending);
+          return [...nonPending, ...confirmed, ...stillPending.filter((m) => m.pending)];
+        });
+        cursorRef.current = newMsgs[newMsgs.length - 1].id;
+      }
+    } catch {
+      // Keep current state
+    }
+  }, [authFetch]);
+
+  // Initialize and poll
+  useEffect(() => {
+    if (!groupId || !active) {
+      initializedRef.current = false;
+      return;
+    }
+
+    if (!initializedRef.current) {
+      initializedRef.current = true;
+      loadInitial(groupId);
+    }
+
+    const interval = setInterval(() => poll(groupId), 7000);
+    return () => clearInterval(interval);
+  }, [groupId, active, loadInitial, poll]);
+
+  // Reset when group changes
+  useEffect(() => {
+    if (!groupId || !active) {
+      setMessages([]);
+      cursorRef.current = null;
+      setHasOlder(true);
+      initializedRef.current = false;
+    }
+  }, [groupId, active]);
+
+  // Load older messages
+  const loadOlder = useCallback(async () => {
+    if (!groupId || messages.length === 0) return;
+    const oldest = messages[0];
+    try {
+      setLoading(true);
+      const res = await authFetch(`/api/groups/${groupId}/chat?before=${oldest.id}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const olderMsgs: ChatMessageItem[] = data.messages || [];
+      setMessages((prev) => [...olderMsgs, ...prev]);
+      setHasOlder(olderMsgs.length >= 20);
+    } catch {
+      // Keep current state
+    } finally {
+      setLoading(false);
+    }
+  }, [groupId, messages, authFetch]);
+
+  // Send message with optimistic UI
+  const sendMessage = useCallback(async (
+    type: "TEXT" | "STICKER",
+    content: string,
+    stickerKey?: string,
+  ) => {
+    if (!groupId || !dbUser) return;
+
+    const tempId = `temp-${Date.now()}`;
+    const optimistic: ChatMessageItem = {
+      id: tempId,
+      type,
+      content,
+      stickerKey: stickerKey || null,
+      deleted: false,
+      userId: dbUser.id,
+      user: { id: dbUser.id, name: dbUser.name, avatar: dbUser.avatar },
+      createdAt: new Date().toISOString(),
+      pending: true,
+    };
+
+    setMessages((prev) => [...prev, optimistic]);
+    setError(null);
+
+    try {
+      const res = await authFetch(`/api/groups/${groupId}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, content: type === "TEXT" ? content : undefined, stickerKey }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        // Remove optimistic message on error
+        setMessages((prev) => prev.filter((m) => m.id !== tempId));
+        setError(data.error || "Error al enviar");
+        return;
+      }
+
+      const data = await res.json();
+      // Replace optimistic with real message
+      setMessages((prev) =>
+        prev.map((m) => (m.id === tempId ? { ...data.message, pending: false } : m)),
+      );
+      cursorRef.current = data.message.id;
+    } catch {
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      setError("Error de conexion");
+    }
+  }, [groupId, dbUser, authFetch]);
+
+  // Delete message (admin)
+  const deleteMessage = useCallback(async (msgId: string) => {
+    if (!groupId) return;
+    try {
+      const res = await authFetch(`/api/groups/${groupId}/chat/${msgId}`, { method: "DELETE" });
+      if (res.ok) {
+        setMessages((prev) =>
+          prev.map((m) => (m.id === msgId ? { ...m, deleted: true, content: "" } : m)),
+        );
+      }
+    } catch {
+      // Ignore
+    }
+  }, [groupId, authFetch]);
+
+  // Report message
+  const reportMessage = useCallback(async (msgId: string) => {
+    if (!groupId) return;
+    try {
+      await authFetch(`/api/groups/${groupId}/chat/${msgId}/report`, { method: "POST" });
+    } catch {
+      // Ignore
+    }
+  }, [groupId, authFetch]);
+
+  // Mute user (admin)
+  const muteUser = useCallback(async (targetUserId: string, durationMinutes = 30) => {
+    if (!groupId) return;
+    try {
+      await authFetch(`/api/groups/${groupId}/chat/mute`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetUserId, durationMinutes }),
+      });
+    } catch {
+      // Ignore
+    }
+  }, [groupId, authFetch]);
+
+  const clearError = useCallback(() => setError(null), []);
+
+  return { messages, loading, error, hasOlder, sendMessage, loadOlder, deleteMessage, reportMessage, muteUser, clearError };
 }
 
 export function useGroupActivity(groupId: string | null) {

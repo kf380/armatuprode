@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Share2, Copy, ChevronLeft, MessageCircle, Trophy, BarChart3, CheckCircle2, Circle, DollarSign, Loader2 } from "lucide-react";
+import { Plus, Share2, Copy, ChevronLeft, MessageCircle, Trophy, BarChart3, CheckCircle2, Circle, DollarSign, Loader2, Send, SmilePlus, X, Trash2, Flag, VolumeX } from "lucide-react";
 import { groups as mockGroups } from "@/lib/mock-data";
 import { useApp } from "@/lib/store";
-import { useGroups, useGroupDetail, useGroupActivity } from "@/lib/hooks";
+import { useGroups, useGroupDetail, useGroupActivity, useGroupChat } from "@/lib/hooks";
+import { STICKERS_BY_CATEGORY, type Sticker } from "@/lib/stickers";
 import { shareGroupInvite, shareRankingPosition } from "@/lib/share";
 import ShareButton from "@/components/ShareButton";
 
@@ -18,11 +19,21 @@ const fadeUp = {
   show: { opacity: 1, y: 0, transition: { duration: 0.35 } },
 } as const;
 
-type GroupTab = "ranking" | "activity";
+type GroupTab = "ranking" | "activity" | "chat";
 
 type GroupType = "fun" | "pool";
 
 const ENTRY_FEE_PRESETS = [2000, 5000, 10000];
+
+function formatChatTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "ahora";
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  return `${Math.floor(hours / 24)}d`;
+}
 
 export default function GroupsScreen() {
   const { authFetch, dbUser } = useApp();
@@ -31,6 +42,31 @@ export default function GroupsScreen() {
   const { detail, loading: detailLoading } = useGroupDetail(selectedGroup);
   const { events: activityEvents, loading: activityLoading, loadMore, hasMore } = useGroupActivity(selectedGroup);
   const [groupTab, setGroupTab] = useState<GroupTab>("ranking");
+  const {
+    messages: chatMessages,
+    loading: chatLoading,
+    error: chatError,
+    hasOlder: chatHasOlder,
+    sendMessage,
+    loadOlder: loadOlderMessages,
+    deleteMessage,
+    reportMessage,
+    muteUser,
+    clearError: clearChatError,
+  } = useGroupChat(selectedGroup, groupTab === "chat");
+  const [chatInput, setChatInput] = useState("");
+  const [showStickerPicker, setShowStickerPicker] = useState(false);
+  const [stickerCategory, setStickerCategory] = useState<string>("football");
+  const [sending, setSending] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom on new messages
+  useEffect(() => {
+    if (groupTab === "chat" && chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [chatMessages.length, groupTab]);
   const [showCreate, setShowCreate] = useState(false);
   const [copied, setCopied] = useState(false);
   const [justPaid, setJustPaid] = useState(false);
@@ -356,7 +392,17 @@ export default function GroupsScreen() {
                 : "border border-border-default text-text-muted"
             }`}
           >
-            <MessageCircle size={12} /> Actividad
+            <BarChart3 size={12} /> Actividad
+          </button>
+          <button
+            onClick={() => setGroupTab("chat")}
+            className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 font-display text-xs font-bold tracking-wider transition-all ${
+              groupTab === "chat"
+                ? "bg-primary text-bg-primary"
+                : "border border-border-default text-text-muted"
+            }`}
+          >
+            <MessageCircle size={12} /> Chat
           </button>
         </div>
 
@@ -469,6 +515,246 @@ export default function GroupsScreen() {
                 )}
               </>
             )}
+          </motion.div>
+        )}
+
+        {/* Chat view */}
+        {groupTab === "chat" && (
+          <motion.div className="space-y-2" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            {/* Error banner */}
+            {chatError && (
+              <div className="flex items-center gap-2 rounded-xl border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
+                <span className="flex-1">{chatError}</span>
+                <button onClick={clearChatError}><X size={14} /></button>
+              </div>
+            )}
+
+            {/* Messages container */}
+            <div
+              ref={chatContainerRef}
+              className="max-h-[60vh] overflow-y-auto space-y-2 rounded-xl border border-border-default bg-bg-primary p-3"
+            >
+              {/* Load older */}
+              {chatHasOlder && chatMessages.length > 0 && (
+                <button
+                  onClick={loadOlderMessages}
+                  className="w-full text-center text-xs text-primary font-semibold py-1"
+                  disabled={chatLoading}
+                >
+                  {chatLoading ? "Cargando..." : "Ver mensajes anteriores"}
+                </button>
+              )}
+
+              {chatLoading && chatMessages.length === 0 ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="animate-spin text-primary" size={24} />
+                </div>
+              ) : chatMessages.length === 0 ? (
+                <div className="text-center py-8 text-text-muted text-sm">
+                  No hay mensajes todavia. Se el primero!
+                </div>
+              ) : (
+                chatMessages.map((msg) => {
+                  if (msg.deleted) {
+                    return (
+                      <div key={msg.id} className="text-center text-xs text-text-muted italic py-1">
+                        Mensaje eliminado
+                      </div>
+                    );
+                  }
+
+                  // SYSTEM message
+                  if (msg.type === "SYSTEM") {
+                    return (
+                      <div key={msg.id} className="flex justify-center py-1">
+                        <div className="rounded-lg bg-primary/5 border border-primary/10 px-3 py-1.5 text-xs text-text-secondary text-center max-w-[80%]">
+                          {msg.content}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  const isOwn = msg.userId === dbUser?.id;
+                  const isAdmin = ranking.find((r) => r.userId === dbUser?.id)?.role === "ADMIN";
+
+                  // STICKER message
+                  if (msg.type === "STICKER") {
+                    return (
+                      <div key={msg.id} className={`flex ${isOwn ? "justify-end" : "justify-start"} group`}>
+                        <div className={`max-w-[70%] ${isOwn ? "items-end" : "items-start"}`}>
+                          {!isOwn && msg.user && (
+                            <span className="text-[10px] text-text-muted ml-1">{msg.user.name}</span>
+                          )}
+                          <div className="text-4xl py-1 px-2">{msg.content}</div>
+                          <div className="flex items-center gap-1">
+                            <span className={`text-[10px] text-text-muted ${msg.pending ? "italic" : ""}`}>
+                              {msg.pending ? "enviando..." : formatChatTime(msg.createdAt)}
+                            </span>
+                            {!isOwn && (
+                              <button onClick={() => reportMessage(msg.id)} className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Flag size={10} className="text-text-muted" />
+                              </button>
+                            )}
+                            {isAdmin && !isOwn && (
+                              <>
+                                <button onClick={() => deleteMessage(msg.id)} className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <Trash2 size={10} className="text-danger" />
+                                </button>
+                                {msg.userId && (
+                                  <button onClick={() => muteUser(msg.userId!)} className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <VolumeX size={10} className="text-danger" />
+                                  </button>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // TEXT message
+                  return (
+                    <div key={msg.id} className={`flex ${isOwn ? "justify-end" : "justify-start"} group`}>
+                      <div className={`max-w-[70%]`}>
+                        {!isOwn && msg.user && (
+                          <span className="text-[10px] text-text-muted ml-1">{msg.user.name}</span>
+                        )}
+                        <div
+                          className={`rounded-2xl px-3 py-2 text-sm ${
+                            isOwn
+                              ? "bg-primary text-bg-primary rounded-br-md"
+                              : "bg-bg-surface border border-border-default rounded-bl-md"
+                          } ${msg.pending ? "opacity-60" : ""}`}
+                        >
+                          {msg.content}
+                        </div>
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <span className={`text-[10px] text-text-muted ${isOwn ? "text-right w-full" : ""}`}>
+                            {msg.pending ? "enviando..." : formatChatTime(msg.createdAt)}
+                          </span>
+                          {!isOwn && (
+                            <button onClick={() => reportMessage(msg.id)} className="opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Flag size={10} className="text-text-muted" />
+                            </button>
+                          )}
+                          {isAdmin && !isOwn && (
+                            <>
+                              <button onClick={() => deleteMessage(msg.id)} className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Trash2 size={10} className="text-danger" />
+                              </button>
+                              {msg.userId && (
+                                <button onClick={() => muteUser(msg.userId!)} className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <VolumeX size={10} className="text-danger" />
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* Sticker Picker */}
+            <AnimatePresence>
+              {showStickerPicker && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="overflow-hidden rounded-xl border border-border-default bg-bg-surface"
+                >
+                  <div className="flex gap-1 p-2 border-b border-border-default">
+                    {Object.keys(STICKERS_BY_CATEGORY).map((cat) => (
+                      <button
+                        key={cat}
+                        onClick={() => setStickerCategory(cat)}
+                        className={`rounded-lg px-2.5 py-1 text-[10px] font-display tracking-wider font-bold transition-colors ${
+                          stickerCategory === cat
+                            ? "bg-primary text-bg-primary"
+                            : "text-text-muted hover:text-text-primary"
+                        }`}
+                      >
+                        {cat === "football" ? "Futbol" : cat === "cargadas" ? "Cargadas" : cat === "ranking" ? "Ranking" : "Boosters"}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-5 gap-1 p-2">
+                    {(STICKERS_BY_CATEGORY[stickerCategory] || []).map((sticker: Sticker) => (
+                      <button
+                        key={sticker.key}
+                        onClick={async () => {
+                          setSending(true);
+                          setShowStickerPicker(false);
+                          await sendMessage("STICKER", sticker.emoji, sticker.key);
+                          setSending(false);
+                        }}
+                        className="flex flex-col items-center gap-0.5 rounded-lg p-2 hover:bg-bg-primary transition-colors"
+                      >
+                        <span className="text-2xl">{sticker.emoji}</span>
+                        <span className="text-[9px] text-text-muted">{sticker.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Composer bar */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowStickerPicker((v) => !v)}
+                className={`h-10 w-10 rounded-xl border flex items-center justify-center transition-colors ${
+                  showStickerPicker
+                    ? "border-primary/40 bg-primary/10 text-primary"
+                    : "border-border-default text-text-muted hover:text-text-primary"
+                }`}
+              >
+                <SmilePlus size={18} />
+              </button>
+              <div className="flex-1 relative">
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value.slice(0, 120))}
+                  onKeyDown={async (e) => {
+                    if (e.key === "Enter" && chatInput.trim() && !sending) {
+                      setSending(true);
+                      const text = chatInput.trim();
+                      setChatInput("");
+                      await sendMessage("TEXT", text);
+                      setSending(false);
+                    }
+                  }}
+                  placeholder="Escribi un mensaje..."
+                  className="w-full rounded-xl border border-border-default bg-bg-primary px-3 py-2.5 pr-10 text-sm text-text-primary placeholder:text-text-muted focus:border-primary/50 focus:outline-none transition-colors"
+                  maxLength={120}
+                />
+                {chatInput.length >= 80 && (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-text-muted">
+                    {chatInput.length}/120
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={async () => {
+                  if (!chatInput.trim() || sending) return;
+                  setSending(true);
+                  const text = chatInput.trim();
+                  setChatInput("");
+                  await sendMessage("TEXT", text);
+                  setSending(false);
+                }}
+                disabled={!chatInput.trim() || sending}
+                className="h-10 w-10 rounded-xl bg-primary flex items-center justify-center text-bg-primary transition-all hover:bg-primary/90 disabled:opacity-40"
+              >
+                <Send size={16} />
+              </button>
+            </div>
           </motion.div>
         )}
 

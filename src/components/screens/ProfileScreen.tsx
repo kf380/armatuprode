@@ -20,7 +20,7 @@ const fadeUp = {
 } as const;
 
 export default function ProfileScreen() {
-  const { dbUser, setActiveTab } = useApp();
+  const { dbUser, setActiveTab, setScreen } = useApp();
   const { stats } = useUserStats();
   const { badges: apiBadges, loading: badgesLoading } = useUserBadges();
 
@@ -228,6 +228,12 @@ export default function ProfileScreen() {
           className="w-full rounded-xl border border-border-default bg-bg-surface py-3 text-xs text-text-muted flex items-center justify-center gap-2 hover:bg-bg-surface-hover transition-all"
         >
           Mis grupos <ChevronRight size={14} />
+        </button>
+        <button
+          onClick={() => setScreen("rules")}
+          className="w-full rounded-xl border border-border-default bg-bg-surface py-3 text-xs text-text-muted flex items-center justify-center gap-2 hover:bg-bg-surface-hover transition-all"
+        >
+          Reglas del juego <ChevronRight size={14} />
         </button>
         <button className="w-full rounded-xl border border-border-default bg-bg-surface py-3 text-xs text-text-muted flex items-center justify-center gap-2 hover:bg-bg-surface-hover transition-all">
           Historial completo <ChevronRight size={14} />

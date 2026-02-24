@@ -13,7 +13,8 @@ export type AppScreen =
   | "join-group"
   | "live-match"
   | "shop"
-  | "notifications";
+  | "notifications"
+  | "rules";
 
 export interface DbUser {
   id: string;

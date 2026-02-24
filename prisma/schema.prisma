@@ -26,16 +26,20 @@ model User {
   referredBy User?  @relation("UserReferrals", fields: [referredById], references: [id])
   referrals  User[] @relation("UserReferrals")
 
-  predictions       Prediction[]
-  memberships       GroupMember[]
-  contributions     PoolContribution[]
-  xpEvents          XpEvent[]
-  notifications     Notification[]
-  activityEvents    ActivityEvent[]
-  badges            UserBadge[]
-  boosters          UserBooster[]
-  coinTransactions  CoinTransaction[]
-  pushSubscriptions PushSubscription[]
+  predictions        Prediction[]
+  memberships        GroupMember[]
+  contributions      PoolContribution[]
+  xpEvents           XpEvent[]
+  notifications      Notification[]
+  activityEvents     ActivityEvent[]
+  badges             UserBadge[]
+  boosters           UserBooster[]
+  coinTransactions   CoinTransaction[]
+  pushSubscriptions  PushSubscription[]
+  wallet             Wallet?
+  boosterActivations BoosterActivation[]
+  chatMessages       ChatMessage[]
+  chatMutes          ChatMute[]
 }
 
 model Tournament {
@@ -86,9 +90,12 @@ model Match {
   scoreB       Int?
   reminderSent Boolean         @default(false)
 
-  tournament  Tournament   @relation(fields: [tournamentId], references: [id])
-  predictions Prediction[]
-  xpEvents    XpEvent[]
+  qualifiedTeam String?
+
+  tournament         Tournament          @relation(fields: [tournamentId], references: [id])
+  predictions        Prediction[]
+  xpEvents           XpEvent[]
+  boosterActivations BoosterActivation[]
 
   @@index([tournamentId, status])
   @@index([matchDate])
@@ -101,15 +108,16 @@ enum MatchStatus {
 }
 
 model Prediction {
-  id             String   @id @default(uuid())
-  userId         String
-  matchId        String
-  scoreA         Int
-  scoreB         Int
-  points         Int      @default(0)
-  boosterApplied String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                 String   @id @default(uuid())
+  userId             String
+  matchId            String
+  scoreA             Int
+  scoreB             Int
+  points             Int      @default(0)
+  boosterApplied     String?
+  predictedQualifier String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   user  User  @relation(fields: [userId], references: [id])
   match Match @relation(fields: [matchId], references: [id])
@@ -135,6 +143,8 @@ model Group {
   members        GroupMember[]
   contributions  PoolContribution[]
   activityEvents ActivityEvent[]
+  chatMessages   ChatMessage[]
+  chatMutes      ChatMute[]
 
   @@index([inviteCode])
   @@index([tournamentId])
@@ -263,4 +273,116 @@ model PushSubscription {
   user User @relation(fields: [userId], references: [id])
 
   @@index([userId])
+}
+
+// --- Wallet & Economy ---
+
+enum WalletLotSource {
+  PREDICTION
+  WINNER
+  EXACT
+  STREAK
+  MATCHDAY
+  REFERRAL
+  PURCHASE
+  MIGRATION
+  ADMIN
+}
+
+enum WalletTransactionType {
+  CREDIT
+  DEBIT
+  EXPIRY
+}
+
+model Wallet {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  balance   Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user         User                @relation(fields: [userId], references: [id])
+  lots         WalletLot[]
+  transactions WalletTransaction[]
+}
+
+model WalletLot {
+  id        String          @id @default(uuid())
+  walletId  String
+  source    WalletLotSource
+  amount    Int
+  remaining Int
+  expiresAt DateTime
+  createdAt DateTime        @default(now())
+
+  wallet Wallet @relation(fields: [walletId], references: [id])
+
+  @@index([walletId, expiresAt])
+}
+
+model WalletTransaction {
+  id             String                @id @default(uuid())
+  walletId       String
+  type           WalletTransactionType
+  amount         Int
+  source         String?
+  reason         String
+  idempotencyKey String?               @unique
+  metadata       Json?
+  createdAt      DateTime              @default(now())
+
+  wallet Wallet @relation(fields: [walletId], references: [id])
+
+  @@index([walletId, createdAt])
+}
+
+model BoosterActivation {
+  id        String   @id @default(uuid())
+  userId    String
+  matchId   String
+  type      String
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id])
+  match Match @relation(fields: [matchId], references: [id])
+
+  @@unique([userId, matchId])
+}
+
+// --- Group Chat ---
+
+enum ChatMessageType {
+  TEXT
+  STICKER
+  SYSTEM
+}
+
+model ChatMessage {
+  id         String          @id @default(uuid())
+  groupId    String
+  userId     String?
+  type       ChatMessageType @default(TEXT)
+  content    String
+  stickerKey String?
+  deleted    Boolean         @default(false)
+  createdAt  DateTime        @default(now())
+
+  group Group @relation(fields: [groupId], references: [id])
+  user  User? @relation(fields: [userId], references: [id])
+
+  @@index([groupId, createdAt])
+}
+
+model ChatMute {
+  id         String   @id @default(uuid())
+  groupId    String
+  userId     String
+  mutedUntil DateTime
+  createdAt  DateTime @default(now())
+
+  group Group @relation(fields: [groupId], references: [id])
+  user  User  @relation(fields: [userId], references: [id])
+
+  @@unique([groupId, userId])
 }
