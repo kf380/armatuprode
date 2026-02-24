@@ -373,7 +373,7 @@ export default function GroupsScreen() {
         )}
 
         {/* Tab pills */}
-        <div className="flex gap-2">
+        <div className="flex gap-2 overflow-x-auto">
           <button
             onClick={() => setGroupTab("ranking")}
             className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 font-display text-xs font-bold tracking-wider transition-all ${

@@ -570,7 +570,7 @@ export function useGroupChat(groupId: string | null, active: boolean) {
   const [error, setError] = useState<string | null>(null);
   const [hasOlder, setHasOlder] = useState(true);
   const cursorRef = useRef<string | null>(null);
-  const initializedRef = useRef(false);
+  const lastGroupRef = useRef<string | null>(null);
 
   // Initial load
   const loadInitial = useCallback(async (gId: string) => {
@@ -583,6 +583,8 @@ export function useGroupChat(groupId: string | null, active: boolean) {
       setMessages(msgs);
       if (msgs.length > 0) {
         cursorRef.current = msgs[msgs.length - 1].id;
+      } else {
+        cursorRef.current = null;
       }
       setHasOlder(msgs.length >= 20);
       setError(null);
@@ -603,12 +605,11 @@ export function useGroupChat(groupId: string | null, active: boolean) {
       const newMsgs: ChatMessageItem[] = data.messages || [];
       if (newMsgs.length > 0) {
         setMessages((prev) => {
-          // Remove optimistic messages that are now confirmed
-          const pendingIds = new Set(prev.filter((m) => m.pending).map((m) => m.id));
-          const confirmed = newMsgs.filter((m) => !pendingIds.has(m.id));
-          const stillPending = prev.filter((m) => !m.pending || !newMsgs.some((nm) => nm.content === m.content && nm.userId === m.userId));
           const nonPending = prev.filter((m) => !m.pending);
-          return [...nonPending, ...confirmed, ...stillPending.filter((m) => m.pending)];
+          const stillPending = prev.filter(
+            (m) => m.pending && !newMsgs.some((nm) => nm.content === m.content && nm.userId === m.userId),
+          );
+          return [...nonPending, ...newMsgs, ...stillPending];
         });
         cursorRef.current = newMsgs[newMsgs.length - 1].id;
       }
@@ -617,31 +618,28 @@ export function useGroupChat(groupId: string | null, active: boolean) {
     }
   }, [authFetch]);
 
-  // Initialize and poll
+  // Single effect: initialize, poll, and reset
   useEffect(() => {
     if (!groupId || !active) {
-      initializedRef.current = false;
+      // Reset state when deactivated
+      setMessages([]);
+      cursorRef.current = null;
+      setHasOlder(true);
+      lastGroupRef.current = null;
       return;
     }
 
-    if (!initializedRef.current) {
-      initializedRef.current = true;
+    // Load initial messages when activated or group changes
+    if (lastGroupRef.current !== groupId) {
+      lastGroupRef.current = groupId;
+      setMessages([]);
+      cursorRef.current = null;
       loadInitial(groupId);
     }
 
     const interval = setInterval(() => poll(groupId), 7000);
     return () => clearInterval(interval);
   }, [groupId, active, loadInitial, poll]);
-
-  // Reset when group changes
-  useEffect(() => {
-    if (!groupId || !active) {
-      setMessages([]);
-      cursorRef.current = null;
-      setHasOlder(true);
-      initializedRef.current = false;
-    }
-  }, [groupId, active]);
 
   // Load older messages
   const loadOlder = useCallback(async () => {
