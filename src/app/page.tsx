@@ -72,7 +72,7 @@ function DeepLinkHandler() {
 }
 
 function AppContent() {
-  const { screen, activeTab, setActiveTab } = useApp();
+  const { screen, activeTab, setActiveTab, authLoading } = useApp();
 
   const handleNavigate = (tab: string) => {
     setActiveTab(tab);
@@ -92,23 +92,37 @@ function AppContent() {
   return (
     <div className="min-h-screen bg-bg-primary">
       <DeepLinkHandler />
-      <main className="mx-auto max-w-lg md:max-w-2xl lg:max-w-4xl px-5 md:px-8 lg:px-12 pt-[calc(1.5rem+env(safe-area-inset-top))] pb-24 md:pb-6 md:pt-20">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.25 }}
-          >
-            {activeTab === "home" && <HomeScreen onNavigate={handleNavigate} />}
-            {activeTab === "matches" && <MatchesScreen />}
-            {activeTab === "groups" && <GroupsScreen />}
-            {activeTab === "ranking" && <RankingScreen />}
-            {activeTab === "profile" && <ProfileScreen />}
-          </motion.div>
-        </AnimatePresence>
-      </main>
+      {authLoading ? (
+        <main className="mx-auto max-w-lg md:max-w-2xl lg:max-w-4xl px-5 md:px-8 lg:px-12 pt-[calc(1.5rem+env(safe-area-inset-top))] pb-24 md:pb-6 md:pt-20">
+          <div className="space-y-4 animate-pulse pt-4">
+            <div className="h-6 w-40 bg-border-default rounded" />
+            <div className="h-4 w-24 bg-border-default/50 rounded" />
+            <div className="mt-6 space-y-3">
+              <div className="h-24 bg-border-default/30 rounded-xl" />
+              <div className="h-24 bg-border-default/30 rounded-xl" />
+              <div className="h-24 bg-border-default/30 rounded-xl" />
+            </div>
+          </div>
+        </main>
+      ) : (
+        <main className="mx-auto max-w-lg md:max-w-2xl lg:max-w-4xl px-5 md:px-8 lg:px-12 pt-[calc(1.5rem+env(safe-area-inset-top))] pb-24 md:pb-6 md:pt-20">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.25 }}
+            >
+              {activeTab === "home" && <HomeScreen onNavigate={handleNavigate} />}
+              {activeTab === "matches" && <MatchesScreen />}
+              {activeTab === "groups" && <GroupsScreen />}
+              {activeTab === "ranking" && <RankingScreen />}
+              {activeTab === "profile" && <ProfileScreen />}
+            </motion.div>
+          </AnimatePresence>
+        </main>
+      )}
       <TabBar active={activeTab} onChange={setActiveTab} />
     </div>
   );

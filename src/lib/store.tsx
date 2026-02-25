@@ -104,6 +104,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const supabase = getSupabase();
 
+    // Quick check: if no Supabase token in storage, skip to login immediately
+    const hasToken = typeof window !== "undefined" &&
+      Object.keys(localStorage).some((k) => k.startsWith("sb-") && k.endsWith("-auth-token"));
+
+    if (!hasToken) {
+      setScreen("login");
+      setAuthLoading(false);
+      // Still set up the listener for future auth events
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(
+        (_event, session) => {
+          if (session?.user) {
+            setAuthUser(session.user);
+          } else {
+            setAuthUser(null);
+            setDbUser(null);
+            setIsLoggedIn(false);
+          }
+        }
+      );
+      return () => subscription.unsubscribe();
+    }
+
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
         setAuthUser(session.user);
@@ -127,16 +149,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
           }
         } catch (err) {
           console.error("Auth fetch error:", err);
-          // On 404 go to setup, on other errors show login
           setScreen("setup");
         }
       } else {
-        // No session, go past splash
         setScreen("login");
       }
       setAuthLoading(false);
     }).catch((err) => {
       console.error("Supabase getSession error:", err);
+      setScreen("login");
       setAuthLoading(false);
     });
 
