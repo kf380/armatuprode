@@ -131,15 +131,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setAuthLoading(false);
     }
 
-    // Quick check: if no Supabase token in storage, skip to login immediately
+    // Quick check: if no Supabase token in storage AND not returning from OAuth,
+    // skip to login immediately
     const hasToken = typeof window !== "undefined" &&
       Object.keys(localStorage).some((k) => k.startsWith("sb-") && k.endsWith("-auth-token"));
+    const isOAuthReturn = typeof window !== "undefined" &&
+      (document.cookie.includes("sb-") || window.location.hash.includes("access_token"));
 
-    if (!hasToken) {
+    if (!hasToken && !isOAuthReturn) {
       setScreen("login");
       setAuthLoading(false);
     } else {
-      // Has token — resolve session from Supabase
+      // Has token or returning from OAuth — resolve session from Supabase
       supabase.auth.getSession().then(async ({ data: { session } }) => {
         if (session?.user) {
           await resolveSession(session);
