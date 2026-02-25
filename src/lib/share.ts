@@ -5,82 +5,93 @@ interface ShareContent {
   url?: string;
 }
 
-function whatsappUrl(text: string): string {
-  return `https://wa.me/?text=${encodeURIComponent(text)}`;
+export function whatsappUrl(text: string, url?: string): string {
+  const fullText = url ? `${text}\n${url}` : text;
+  return `https://wa.me/?text=${encodeURIComponent(fullText)}`;
 }
 
-function isMobile(): boolean {
-  if (typeof navigator === "undefined") return false;
-  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-}
-
-export async function triggerShare(content: ShareContent): Promise<"shared" | "copied" | "whatsapp"> {
-  const fullText = content.url ? `${content.text}\n${content.url}` : content.text;
-
-  // Mobile: try WhatsApp deep link first
-  if (isMobile()) {
-    window.open(whatsappUrl(fullText), "_blank");
-    return "whatsapp";
+export async function copyToClipboard(text: string, url?: string): Promise<boolean> {
+  const fullText = url ? `${text}\n${url}` : text;
+  if (typeof navigator !== "undefined" && navigator.clipboard) {
+    await navigator.clipboard.writeText(fullText);
+    return true;
   }
+  return false;
+}
 
-  // Desktop: try Web Share API
+export async function nativeShare(content: ShareContent): Promise<boolean> {
   if (typeof navigator !== "undefined" && navigator.share) {
     try {
       await navigator.share({
         text: content.text,
         url: content.url,
       });
-      return "shared";
+      return true;
     } catch {
-      // User cancelled or not supported, fall through to clipboard
+      return false;
     }
   }
-
-  // Fallback: clipboard
-  if (typeof navigator !== "undefined" && navigator.clipboard) {
-    await navigator.clipboard.writeText(fullText);
-    return "copied";
-  }
-
-  return "copied";
+  return false;
 }
 
-export function shareGroupInvite(group: { name: string; emoji?: string; inviteCode: string }): Promise<"shared" | "copied" | "whatsapp"> {
-  const url = `${APP_URL}/join/${group.inviteCode}`;
-  return triggerShare({
-    text: `Unite a *${group.emoji || ""} ${group.name}* en ArmatuProde! Arma tu prode y competi con amigos`,
-    url,
-  });
+export function getGroupInviteContent(group: { name: string; emoji?: string; inviteCode: string }): ShareContent {
+  return {
+    text: `Unite a *${group.emoji || ""} ${group.name}* en ArmatuProde!\nPredeci resultados y competi con amigos ⚽`,
+    url: `${APP_URL}/join/${group.inviteCode}`,
+  };
 }
 
-export function sharePrediction(match: { teamA: { code: string; flag: string }; teamB: { code: string; flag: string } }, scoreA: number, scoreB: number): Promise<"shared" | "copied" | "whatsapp"> {
-  return triggerShare({
+export function getPredictionContent(match: { teamA: { code: string; flag: string }; teamB: { code: string; flag: string } }, scoreA: number, scoreB: number): ShareContent {
+  return {
     text: `${match.teamA.flag} ${match.teamA.code} ${scoreA}-${scoreB} ${match.teamB.code} ${match.teamB.flag}\nYo ya puse mi prediccion en ArmatuProde. Vos que decis?`,
     url: APP_URL,
-  });
+  };
 }
 
-export function shareExactResult(match: { teamA: { code: string; flag: string }; teamB: { code: string; flag: string } }, scoreA: number, scoreB: number, points: number): Promise<"shared" | "copied" | "whatsapp"> {
+export function getExactResultContent(match: { teamA: { code: string; flag: string }; teamB: { code: string; flag: string } }, scoreA: number, scoreB: number, points: number): ShareContent {
   const emoji = points === 3 ? "🎯" : "✅";
   const label = points === 3 ? "Acerte el resultado exacto!" : "Acerte el ganador!";
-  return triggerShare({
+  return {
     text: `${emoji} ${label}\n${match.teamA.flag} ${match.teamA.code} ${scoreA}-${scoreB} ${match.teamB.code} ${match.teamB.flag}\nPodes ganarme? Juga en ArmatuProde`,
     url: APP_URL,
-  });
+  };
 }
 
-export function shareReferral(code: string): Promise<"shared" | "copied" | "whatsapp"> {
-  const url = `${APP_URL}?ref=${code}`;
-  return triggerShare({
-    text: "Probá ArmatuProde! Armá tu prode y competí con amigos",
-    url,
-  });
+export function getReferralContent(code: string): ShareContent {
+  return {
+    text: "Proba ArmatuProde! Arma tu prode y competi con amigos ⚽",
+    url: `${APP_URL}?ref=${code}`,
+  };
 }
 
-export function shareRankingPosition(name: string, position: number, groupName?: string): Promise<"shared" | "copied" | "whatsapp"> {
+export function getRankingContent(name: string, position: number, groupName?: string): ShareContent {
   const where = groupName ? ` en ${groupName}` : " en el ranking global";
-  return triggerShare({
-    text: `Soy #${position}${where} de ArmatuProde! Podes ganarme?`,
+  return {
+    text: `Soy #${position}${where} de ArmatuProde! Podes ganarme? ⚽`,
     url: APP_URL,
-  });
+  };
+}
+
+// Legacy wrappers for backward compat (deprecated — use ShareMenu instead)
+export async function triggerShare(content: ShareContent): Promise<"shared" | "copied" | "whatsapp"> {
+  const fullText = content.url ? `${content.text}\n${content.url}` : content.text;
+  window.open(whatsappUrl(content.text, content.url), "_blank");
+  return "whatsapp";
+}
+
+export function shareGroupInvite(group: { name: string; emoji?: string; inviteCode: string }) {
+  const c = getGroupInviteContent(group);
+  return triggerShare(c);
+}
+export function sharePrediction(match: { teamA: { code: string; flag: string }; teamB: { code: string; flag: string } }, scoreA: number, scoreB: number) {
+  return triggerShare(getPredictionContent(match, scoreA, scoreB));
+}
+export function shareExactResult(match: { teamA: { code: string; flag: string }; teamB: { code: string; flag: string } }, scoreA: number, scoreB: number, points: number) {
+  return triggerShare(getExactResultContent(match, scoreA, scoreB, points));
+}
+export function shareReferral(code: string) {
+  return triggerShare(getReferralContent(code));
+}
+export function shareRankingPosition(name: string, position: number, groupName?: string) {
+  return triggerShare(getRankingContent(name, position, groupName));
 }

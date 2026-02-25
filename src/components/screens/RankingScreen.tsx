@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { Loader2 } from "lucide-react";
 import { useApp } from "@/lib/store";
 import { useRanking } from "@/lib/hooks";
-import { shareRankingPosition } from "@/lib/share";
+import { getRankingContent } from "@/lib/share";
 import ShareButton from "@/components/ShareButton";
 
 const stagger = {
@@ -177,7 +177,7 @@ export default function RankingScreen() {
             <div className="text-[10px] text-text-muted">pts</div>
           </div>
           <ShareButton
-            onShare={() => shareRankingPosition(user.name, user.position)}
+            content={getRankingContent(user.name, user.position)}
             variant="icon"
           />
         </div>

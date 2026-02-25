@@ -2,38 +2,47 @@
 
 import { useState } from "react";
 import { Share2 } from "lucide-react";
+import ShareMenu from "@/components/ShareMenu";
+
+interface ShareContent {
+  text: string;
+  url?: string;
+}
 
 interface ShareButtonProps {
-  onShare: () => Promise<"shared" | "copied" | "whatsapp">;
+  content: ShareContent;
   label?: string;
   variant?: "primary" | "outline" | "icon";
   className?: string;
+  menuTitle?: string;
+  // Legacy support
+  onShare?: () => Promise<"shared" | "copied" | "whatsapp">;
 }
 
-export default function ShareButton({ onShare, label = "COMPARTIR", variant = "outline", className = "" }: ShareButtonProps) {
-  const [feedback, setFeedback] = useState<string | null>(null);
+export default function ShareButton({ content, onShare, label = "COMPARTIR", variant = "outline", className = "", menuTitle }: ShareButtonProps) {
+  const [open, setOpen] = useState(false);
 
-  const handleClick = async () => {
-    const result = await onShare();
-    if (result === "copied") {
-      setFeedback("Copiado!");
-    } else if (result === "whatsapp") {
-      setFeedback("Compartido!");
-    } else {
-      setFeedback("Compartido!");
+  const handleClick = () => {
+    if (onShare && !content) {
+      // Legacy mode
+      onShare();
+      return;
     }
-    setTimeout(() => setFeedback(null), 2000);
+    setOpen(true);
   };
 
   if (variant === "icon") {
     return (
-      <button
-        onClick={handleClick}
-        className={`h-8 w-8 rounded-full border border-border-default flex items-center justify-center text-text-secondary hover:text-primary transition-colors ${className}`}
-        title={label}
-      >
-        {feedback ? <span className="text-[10px] text-primary font-bold">✓</span> : <Share2 size={14} />}
-      </button>
+      <>
+        <button
+          onClick={handleClick}
+          className={`h-8 w-8 rounded-full border border-border-default flex items-center justify-center text-text-secondary hover:text-primary transition-colors ${className}`}
+          title={label}
+        >
+          <Share2 size={14} />
+        </button>
+        {content && <ShareMenu open={open} onClose={() => setOpen(false)} content={content} title={menuTitle} />}
+      </>
     );
   }
 
@@ -42,18 +51,15 @@ export default function ShareButton({ onShare, label = "COMPARTIR", variant = "o
     : "rounded-xl border border-primary/30 bg-primary/10 py-3 font-display text-xs font-bold tracking-widest text-primary transition-all hover:bg-primary/20";
 
   return (
-    <button
-      onClick={handleClick}
-      className={`w-full flex items-center justify-center gap-2 ${baseClasses} ${className}`}
-    >
-      {feedback ? (
-        <span>{feedback}</span>
-      ) : (
-        <>
-          <Share2 size={14} />
-          {label}
-        </>
-      )}
-    </button>
+    <>
+      <button
+        onClick={handleClick}
+        className={`w-full flex items-center justify-center gap-2 ${baseClasses} ${className}`}
+      >
+        <Share2 size={14} />
+        {label}
+      </button>
+      {content && <ShareMenu open={open} onClose={() => setOpen(false)} content={content} title={menuTitle} />}
+    </>
   );
 }

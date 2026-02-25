@@ -6,7 +6,7 @@ import { Settings, Share2, ChevronRight } from "lucide-react";
 import XPBar from "@/components/XPBar";
 import { useApp } from "@/lib/store";
 import { useUserStats, useUserBadges, deriveLevel } from "@/lib/hooks";
-import { triggerShare, shareReferral } from "@/lib/share";
+import { getReferralContent } from "@/lib/share";
 import ShareButton from "@/components/ShareButton";
 import { currentUser as mockUser, badges as mockBadges, levels } from "@/lib/mock-data";
 
@@ -210,7 +210,7 @@ export default function ProfileScreen() {
             </div>
           </div>
           <ShareButton
-            onShare={() => shareReferral(dbUser?.referralCode || "")}
+            content={getReferralContent(dbUser?.referralCode || "")}
             label="COMPARTIR CODIGO"
             variant="primary"
           />
@@ -220,7 +220,7 @@ export default function ProfileScreen() {
       {/* Actions */}
       <motion.div variants={fadeUp} className="space-y-2">
         <ShareButton
-          onShare={() => triggerShare({ text: "Arma tu prode y competi con amigos en ArmatuProde!", url: typeof window !== "undefined" ? window.location.origin : "https://armatuprode.com.ar" })}
+          content={{ text: "Arma tu prode y competi con amigos en ArmatuProde!", url: typeof window !== "undefined" ? window.location.origin : "https://armatuprode.com.ar" }}
           label="INVITAR AMIGOS"
         />
         <button

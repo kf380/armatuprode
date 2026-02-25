@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Check, AlertTriangle, Minus, Plus, X, Sparkles, Loader2 } from "lucide-react";
 import { useApp } from "@/lib/store";
 import { useMatches, ScreenMatch } from "@/lib/hooks";
-import { sharePrediction, shareExactResult } from "@/lib/share";
+import { getPredictionContent, getExactResultContent } from "@/lib/share";
 import ShareButton from "@/components/ShareButton";
 import { matches as mockMatches } from "@/lib/mock-data";
 
@@ -282,7 +282,7 @@ export default function MatchesScreen() {
                     className="mt-3 overflow-hidden"
                   >
                     <ShareButton
-                      onShare={() => sharePrediction(match, pred.scoreA, pred.scoreB)}
+                      content={getPredictionContent(match, pred.scoreA, pred.scoreB)}
                       label="COMPARTIR PREDICCION"
                       variant="primary"
                     />
@@ -347,7 +347,7 @@ export default function MatchesScreen() {
                 {match.pointsEarned !== undefined && match.pointsEarned > 0 && (
                   <div className="mt-2">
                     <ShareButton
-                      onShare={() => shareExactResult(match, match.scoreA ?? 0, match.scoreB ?? 0, match.pointsEarned ?? 0)}
+                      content={getExactResultContent(match, match.scoreA ?? 0, match.scoreB ?? 0, match.pointsEarned ?? 0)}
                       label="COMPARTIR RESULTADO"
                       variant="outline"
                     />

@@ -7,7 +7,7 @@ import { groups as mockGroups } from "@/lib/mock-data";
 import { useApp } from "@/lib/store";
 import { useGroups, useGroupDetail, useGroupActivity, useGroupChat } from "@/lib/hooks";
 import { STICKERS_BY_CATEGORY, type Sticker } from "@/lib/stickers";
-import { shareGroupInvite, shareRankingPosition } from "@/lib/share";
+import { getGroupInviteContent, getRankingContent, shareGroupInvite } from "@/lib/share";
 import ShareButton from "@/components/ShareButton";
 
 const stagger = {
@@ -275,7 +275,7 @@ export default function GroupsScreen() {
             <p className="text-xs text-text-muted">{groupMembers} miembros • {groupTournament}</p>
           </div>
           <ShareButton
-            onShare={() => shareGroupInvite({ name: groupName, emoji: groupEmoji, inviteCode: groupInviteCode })}
+            content={getGroupInviteContent({ name: groupName, emoji: groupEmoji, inviteCode: groupInviteCode })}
             variant="icon"
           />
         </div>
@@ -454,7 +454,7 @@ export default function GroupsScreen() {
                     {/* Share button for user's position */}
                     {isUser && (
                       <ShareButton
-                        onShare={() => shareRankingPosition(player.name, position, groupName)}
+                        content={getRankingContent(player.name, position, groupName)}
                         variant="icon"
                       />
                     )}
@@ -769,7 +769,7 @@ export default function GroupsScreen() {
 
         {/* Invite button */}
         <ShareButton
-          onShare={() => shareGroupInvite({ name: groupName, emoji: groupEmoji, inviteCode: groupInviteCode })}
+          content={getGroupInviteContent({ name: groupName, emoji: groupEmoji, inviteCode: groupInviteCode })}
           label="INVITAR AMIGOS"
           variant="primary"
         />
