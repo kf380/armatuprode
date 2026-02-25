@@ -239,6 +239,17 @@ export default function ProfileScreen() {
           Historial completo <ChevronRight size={14} />
         </button>
       </motion.div>
+
+      {/* Legal footer */}
+      <motion.div variants={fadeUp} className="flex items-center justify-center gap-3 pt-2 pb-4">
+        <a href="/terms" className="text-[11px] text-text-muted hover:text-primary transition-colors">
+          Terminos y condiciones
+        </a>
+        <span className="text-text-muted/30">|</span>
+        <a href="/privacy" className="text-[11px] text-text-muted hover:text-primary transition-colors">
+          Politica de privacidad
+        </a>
+      </motion.div>
     </motion.div>
   );
 }

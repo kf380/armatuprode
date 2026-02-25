@@ -40,6 +40,7 @@ model User {
   boosterActivations BoosterActivation[]
   chatMessages       ChatMessage[]
   chatMutes          ChatMute[]
+  paymentOrders      PaymentOrder[]
 }
 
 model Tournament {
@@ -387,4 +388,36 @@ model ChatMute {
   user  User  @relation(fields: [userId], references: [id])
 
   @@unique([groupId, userId])
+}
+
+// --- Payments ---
+
+enum PaymentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REFUNDED
+}
+
+enum PaymentType {
+  COIN_PACK
+  POOL_ENTRY
+}
+
+model PaymentOrder {
+  id           String        @id @default(uuid())
+  userId       String
+  type         PaymentType
+  status       PaymentStatus @default(PENDING)
+  amount       Int
+  description  String
+  metadata     Json?
+  externalId   String?       @unique
+  preferenceId String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
 }

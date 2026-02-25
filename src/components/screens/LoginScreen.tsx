@@ -163,9 +163,9 @@ export default function LoginScreen() {
 
         <p className="mt-8 text-xs text-text-muted leading-relaxed">
           Al continuar aceptas los{" "}
-          <span className="text-primary underline">terminos y condiciones</span>
+          <a href="/terms" className="text-primary underline">terminos y condiciones</a>
           {" "}y la{" "}
-          <span className="text-primary underline">politica de privacidad</span>
+          <a href="/privacy" className="text-primary underline">politica de privacidad</a>
         </p>
       </motion.div>
     </div>

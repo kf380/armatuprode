@@ -36,9 +36,9 @@ const boosterDefs = [
 ];
 
 const coinPacks = [
-  { coins: 500, price: 999, popular: false },
-  { coins: 1200, price: 1999, popular: true },
-  { coins: 3000, price: 3999, popular: false },
+  { id: "small", coins: 500, price: 999, popular: false },
+  { id: "medium", coins: 1200, price: 1999, popular: true },
+  { id: "large", coins: 3000, price: 3999, popular: false },
 ];
 
 export default function ShopScreen() {
@@ -95,11 +95,29 @@ export default function ShopScreen() {
     setBuying(false);
   };
 
-  const handleBuyCoins = (amount: number) => {
-    // TODO: integrate real payment
-    setCoins(coins + amount);
-    setPurchased("coins");
-    setTimeout(() => setPurchased(null), 1500);
+  const [buyingCoins, setBuyingCoins] = useState(false);
+
+  const handleBuyCoins = async (packId: string) => {
+    if (buyingCoins) return;
+    setBuyingCoins(true);
+    try {
+      const res = await authFetch("/api/payments/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "coin_pack", packId }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        window.location.href = data.initPoint;
+      } else {
+        const data = await res.json();
+        alert(data.error || "Error al iniciar el pago");
+        setBuyingCoins(false);
+      }
+    } catch {
+      alert("Error de conexion");
+      setBuyingCoins(false);
+    }
   };
 
   if (loadingInventory) {
@@ -197,9 +215,10 @@ export default function ShopScreen() {
         <div className="space-y-3">
           {coinPacks.map((pack) => (
             <button
-              key={pack.coins}
-              onClick={() => handleBuyCoins(pack.coins)}
-              className={`w-full rounded-2xl border p-5 flex items-center justify-between transition-all hover:bg-bg-surface-hover active:scale-[0.99] ${
+              key={pack.id}
+              onClick={() => handleBuyCoins(pack.id)}
+              disabled={buyingCoins}
+              className={`w-full rounded-2xl border p-5 flex items-center justify-between transition-all hover:bg-bg-surface-hover active:scale-[0.99] disabled:opacity-50 ${
                 pack.popular
                   ? "border-accent/30 bg-accent/5"
                   : "border-border-default bg-bg-surface"

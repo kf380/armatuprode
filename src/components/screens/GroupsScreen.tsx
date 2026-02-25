@@ -199,19 +199,47 @@ export default function GroupsScreen() {
     setCreating(false);
   };
 
-  const handlePayEntry = async (groupId: string) => {
-    try {
-      const res = await authFetch(`/api/groups/${groupId}/pool`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-      if (res.ok) {
-        setJustPaid(true);
-        setTimeout(() => setJustPaid(false), 2500);
-        fetchPoolData(groupId);
+  const [payingEntry, setPayingEntry] = useState(false);
+
+  const handlePayEntry = async (groupId: string, currency: string) => {
+    if (payingEntry) return;
+
+    if (currency === "ARS") {
+      // Real money payment via MercadoPago
+      setPayingEntry(true);
+      try {
+        const res = await authFetch("/api/payments/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "pool_entry", groupId }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          window.location.href = data.initPoint;
+        } else {
+          const data = await res.json();
+          alert(data.error || "Error al iniciar el pago");
+          setPayingEntry(false);
+        }
+      } catch {
+        alert("Error de conexion");
+        setPayingEntry(false);
       }
-    } catch {
-      alert("Error al registrar pago");
+    } else {
+      // Coins payment — existing flow
+      try {
+        const res = await authFetch(`/api/groups/${groupId}/pool`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        });
+        if (res.ok) {
+          setJustPaid(true);
+          setTimeout(() => setJustPaid(false), 2500);
+          fetchPoolData(groupId);
+        }
+      } catch {
+        alert("Error al registrar pago");
+      }
     }
   };
 
@@ -320,13 +348,20 @@ export default function GroupsScreen() {
 
             {!userHasPaid && (
               <motion.button
-                onClick={() => handlePayEntry(selectedGroup)}
-                className="w-full rounded-xl bg-accent py-3.5 font-display text-sm font-bold tracking-widest text-bg-primary transition-all hover:bg-accent/90 active:scale-[0.98] flex items-center justify-center gap-2"
+                onClick={() => handlePayEntry(selectedGroup, groupCurrency)}
+                disabled={payingEntry}
+                className="w-full rounded-xl bg-accent py-3.5 font-display text-sm font-bold tracking-widest text-bg-primary transition-all hover:bg-accent/90 active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-50"
                 style={{ boxShadow: "0 0 20px rgba(234,179,8,0.3)" }}
                 whileTap={{ scale: 0.97 }}
               >
-                <DollarSign size={16} />
-                PAGAR MI ENTRADA — ${groupEntryFee.toLocaleString()}
+                {payingEntry ? (
+                  <><Loader2 size={16} className="animate-spin" /> PROCESANDO...</>
+                ) : (
+                  <>
+                    <DollarSign size={16} />
+                    PAGAR MI ENTRADA — ${groupEntryFee.toLocaleString()}
+                  </>
+                )}
               </motion.button>
             )}
             {justPaid && (
