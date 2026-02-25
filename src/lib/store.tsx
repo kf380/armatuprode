@@ -104,6 +104,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const supabase = getSupabase();
 
+    // Helper: given a session, fetch DB user and navigate
+    async function resolveSession(session: { user: { id: string; email?: string }; access_token: string }) {
+      setAuthUser(session.user as SupabaseUser);
+      try {
+        const res = await fetch("/api/users", {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.user) {
+            setDbUser(data.user);
+            setCoins(data.user.coins);
+            setIsLoggedIn(true);
+            setScreen("main");
+          } else {
+            setScreen("setup");
+          }
+        } else {
+          setScreen("setup");
+        }
+      } catch (err) {
+        console.error("Auth fetch error:", err);
+        setScreen("setup");
+      }
+      setAuthLoading(false);
+    }
+
     // Quick check: if no Supabase token in storage, skip to login immediately
     const hasToken = typeof window !== "undefined" &&
       Object.keys(localStorage).some((k) => k.startsWith("sb-") && k.endsWith("-auth-token"));
@@ -111,64 +138,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!hasToken) {
       setScreen("login");
       setAuthLoading(false);
-      // Still set up the listener for future auth events
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(
-        (_event, session) => {
-          if (session?.user) {
-            setAuthUser(session.user);
-          } else {
-            setAuthUser(null);
-            setDbUser(null);
-            setIsLoggedIn(false);
-          }
+    } else {
+      // Has token — resolve session from Supabase
+      supabase.auth.getSession().then(async ({ data: { session } }) => {
+        if (session?.user) {
+          await resolveSession(session);
+        } else {
+          setScreen("login");
+          setAuthLoading(false);
         }
-      );
-      return () => subscription.unsubscribe();
+      }).catch((err) => {
+        console.error("Supabase getSession error:", err);
+        setScreen("login");
+        setAuthLoading(false);
+      });
     }
 
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) {
-        setAuthUser(session.user);
-        // Try to fetch DB profile with auth token
-        try {
-          const res = await fetch("/api/users", {
-            headers: { Authorization: `Bearer ${session.access_token}` },
-          });
-          if (res.ok) {
-            const data = await res.json();
-            if (data?.user) {
-              setDbUser(data.user);
-              setCoins(data.user.coins);
-              setIsLoggedIn(true);
-              setScreen("main");
-            } else {
-              setScreen("setup");
-            }
-          } else {
-            setScreen("setup");
-          }
-        } catch (err) {
-          console.error("Auth fetch error:", err);
-          setScreen("setup");
-        }
-      } else {
-        setScreen("login");
-      }
-      setAuthLoading(false);
-    }).catch((err) => {
-      console.error("Supabase getSession error:", err);
-      setScreen("login");
-      setAuthLoading(false);
-    });
-
+    // Listen for auth changes (login, logout, token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      async (_event, session) => {
         if (session?.user) {
-          setAuthUser(session.user);
+          await resolveSession(session);
         } else {
           setAuthUser(null);
           setDbUser(null);
           setIsLoggedIn(false);
+          setScreen("login");
         }
       }
     );
