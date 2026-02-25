@@ -80,7 +80,7 @@ function AppContent() {
   return (
     <div className="min-h-screen bg-bg-primary">
       <DeepLinkHandler />
-      <main className="mx-auto max-w-lg md:max-w-2xl lg:max-w-4xl px-5 md:px-8 lg:px-12 pt-6 pb-24 md:pb-6 md:pt-20">
+      <main className="mx-auto max-w-lg md:max-w-2xl lg:max-w-4xl px-5 md:px-8 lg:px-12 pt-[calc(1.5rem+env(safe-area-inset-top))] pb-24 md:pb-6 md:pt-20">
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}

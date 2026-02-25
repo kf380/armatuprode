@@ -30,6 +30,7 @@ export default function TabBar({
               <button
                 key={tab.id}
                 onClick={() => onChange(tab.id)}
+                aria-label={tab.label}
                 className="relative flex items-center gap-2 px-4 py-2 transition-all"
               >
                 <Icon
@@ -72,6 +73,7 @@ export default function TabBar({
               <button
                 key={tab.id}
                 onClick={() => onChange(tab.id)}
+                aria-label={tab.label}
                 className="relative flex flex-col items-center gap-1 px-4 py-1 transition-all"
               >
                 {isActive && (
@@ -92,7 +94,7 @@ export default function TabBar({
                   }`}
                 />
                 <span
-                  className={`text-[9px] font-bold tracking-widest uppercase font-display transition-colors ${
+                  className={`text-[11px] font-bold tracking-widest uppercase font-display transition-colors ${
                     isActive ? "text-primary" : "text-text-muted"
                   }`}
                 >

@@ -18,7 +18,7 @@ export default function RulesScreen() {
 
   return (
     <div className="min-h-screen bg-bg-primary">
-      <div className="mx-auto max-w-lg md:max-w-2xl px-5 pt-6 pb-24">
+      <div className="mx-auto max-w-lg md:max-w-2xl px-5 pt-[calc(1.5rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
         <motion.div className="space-y-6" variants={stagger} initial="hidden" animate="show">
           {/* Header */}
           <motion.div variants={fadeUp} className="flex items-center gap-3 pt-2">

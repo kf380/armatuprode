@@ -58,6 +58,7 @@ export default function GroupsScreen() {
   const [showStickerPicker, setShowStickerPicker] = useState(false);
   const [stickerCategory, setStickerCategory] = useState<string>("football");
   const [sending, setSending] = useState(false);
+  const [activeMessageMenu, setActiveMessageMenu] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
@@ -576,38 +577,61 @@ export default function GroupsScreen() {
 
                   const isOwn = msg.userId === dbUser?.id;
                   const isAdmin = ranking.find((r) => r.userId === dbUser?.id)?.role === "ADMIN";
+                  const showMenu = activeMessageMenu === msg.id;
+
+                  // Action menu (shared between TEXT and STICKER)
+                  const actionMenu = !isOwn && !msg.pending && showMenu ? (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="flex items-center gap-1 mt-1"
+                    >
+                      <button
+                        onClick={() => { reportMessage(msg.id); setActiveMessageMenu(null); }}
+                        className="flex items-center gap-1 rounded-lg bg-bg-surface border border-border-default px-2 py-1 text-[10px] text-text-muted active:scale-95"
+                        aria-label="Reportar mensaje"
+                      >
+                        <Flag size={10} /> Reportar
+                      </button>
+                      {isAdmin && (
+                        <button
+                          onClick={() => { deleteMessage(msg.id); setActiveMessageMenu(null); }}
+                          className="flex items-center gap-1 rounded-lg bg-danger/10 border border-danger/20 px-2 py-1 text-[10px] text-danger active:scale-95"
+                          aria-label="Borrar mensaje"
+                        >
+                          <Trash2 size={10} /> Borrar
+                        </button>
+                      )}
+                      {isAdmin && msg.userId && (
+                        <button
+                          onClick={() => { muteUser(msg.userId!); setActiveMessageMenu(null); }}
+                          className="flex items-center gap-1 rounded-lg bg-danger/10 border border-danger/20 px-2 py-1 text-[10px] text-danger active:scale-95"
+                          aria-label="Mutear usuario"
+                        >
+                          <VolumeX size={10} /> Mutear
+                        </button>
+                      )}
+                    </motion.div>
+                  ) : null;
 
                   // STICKER message
                   if (msg.type === "STICKER") {
                     return (
-                      <div key={msg.id} className={`flex ${isOwn ? "justify-end" : "justify-start"} group`}>
+                      <div key={msg.id} className={`flex ${isOwn ? "justify-end" : "justify-start"}`}>
                         <div className={`max-w-[70%] ${isOwn ? "items-end" : "items-start"}`}>
                           {!isOwn && msg.user && (
                             <span className="text-[10px] text-text-muted ml-1">{msg.user.name}</span>
                           )}
-                          <div className="text-4xl py-1 px-2">{msg.content}</div>
-                          <div className="flex items-center gap-1">
-                            <span className={`text-[10px] text-text-muted ${msg.pending ? "italic" : ""}`}>
-                              {msg.pending ? "enviando..." : formatChatTime(msg.createdAt)}
-                            </span>
-                            {!isOwn && (
-                              <button onClick={() => reportMessage(msg.id)} className="opacity-0 group-hover:opacity-100 transition-opacity">
-                                <Flag size={10} className="text-text-muted" />
-                              </button>
-                            )}
-                            {isAdmin && !isOwn && (
-                              <>
-                                <button onClick={() => deleteMessage(msg.id)} className="opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <Trash2 size={10} className="text-danger" />
-                                </button>
-                                {msg.userId && (
-                                  <button onClick={() => muteUser(msg.userId!)} className="opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <VolumeX size={10} className="text-danger" />
-                                  </button>
-                                )}
-                              </>
-                            )}
+                          <div
+                            className="text-4xl py-1 px-2 cursor-pointer"
+                            onClick={() => !isOwn && setActiveMessageMenu(showMenu ? null : msg.id)}
+                          >
+                            {msg.content}
                           </div>
+                          <span className={`text-[10px] text-text-muted ${msg.pending ? "italic" : ""}`}>
+                            {msg.pending ? "enviando..." : formatChatTime(msg.createdAt)}
+                          </span>
+                          {actionMenu}
                         </div>
                       </div>
                     );
@@ -615,17 +639,18 @@ export default function GroupsScreen() {
 
                   // TEXT message
                   return (
-                    <div key={msg.id} className={`flex ${isOwn ? "justify-end" : "justify-start"} group`}>
+                    <div key={msg.id} className={`flex ${isOwn ? "justify-end" : "justify-start"}`}>
                       <div className={`max-w-[70%]`}>
                         {!isOwn && msg.user && (
                           <span className="text-[10px] text-text-muted ml-1">{msg.user.name}</span>
                         )}
                         <div
-                          className={`rounded-2xl px-3 py-2 text-sm ${
+                          className={`rounded-2xl px-3 py-2 text-sm cursor-pointer ${
                             isOwn
                               ? "bg-primary text-bg-primary rounded-br-md"
                               : "bg-bg-surface border border-border-default rounded-bl-md"
                           } ${msg.pending ? "opacity-60" : ""}`}
+                          onClick={() => !isOwn && setActiveMessageMenu(showMenu ? null : msg.id)}
                         >
                           {msg.content}
                         </div>
@@ -633,24 +658,8 @@ export default function GroupsScreen() {
                           <span className={`text-[10px] text-text-muted ${isOwn ? "text-right w-full" : ""}`}>
                             {msg.pending ? "enviando..." : formatChatTime(msg.createdAt)}
                           </span>
-                          {!isOwn && (
-                            <button onClick={() => reportMessage(msg.id)} className="opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Flag size={10} className="text-text-muted" />
-                            </button>
-                          )}
-                          {isAdmin && !isOwn && (
-                            <>
-                              <button onClick={() => deleteMessage(msg.id)} className="opacity-0 group-hover:opacity-100 transition-opacity">
-                                <Trash2 size={10} className="text-danger" />
-                              </button>
-                              {msg.userId && (
-                                <button onClick={() => muteUser(msg.userId!)} className="opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <VolumeX size={10} className="text-danger" />
-                                </button>
-                              )}
-                            </>
-                          )}
                         </div>
+                        {actionMenu}
                       </div>
                     </div>
                   );

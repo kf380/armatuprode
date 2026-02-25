@@ -49,7 +49,7 @@ export default function NotificationsScreen() {
   }
 
   return (
-    <div className="min-h-screen bg-bg-primary px-5 md:px-8 py-6 mx-auto max-w-lg md:max-w-xl">
+    <div className="min-h-screen bg-bg-primary px-5 md:px-8 pt-[calc(1.5rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))] mx-auto max-w-lg md:max-w-xl">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <button
