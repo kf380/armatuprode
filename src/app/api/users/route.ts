@@ -95,6 +95,26 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
     }
 
+    // Backfill referral code for users created before the feature existed
+    if (!dbUser.referralCode) {
+      const referralCode = dbUser.name.trim().toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 6)
+        + Math.random().toString(36).slice(2, 6);
+      try {
+        dbUser = await prisma.user.update({
+          where: { id: dbUser.id },
+          data: { referralCode },
+        });
+      } catch {
+        // Unique conflict — retry with different random suffix
+        const retryCode = dbUser.name.trim().toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 6)
+          + Math.random().toString(36).slice(2, 6);
+        dbUser = await prisma.user.update({
+          where: { id: dbUser.id },
+          data: { referralCode: retryCode },
+        });
+      }
+    }
+
     return NextResponse.json({ user: dbUser });
   } catch (err) {
     console.error("GET /api/users error:", err);
