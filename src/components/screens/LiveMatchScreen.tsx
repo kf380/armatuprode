@@ -119,7 +119,13 @@ export default function LiveMatchScreen() {
             >
               {scoreA} - {scoreB}
             </motion.div>
-            <div className="text-[10px] text-text-muted mt-0.5">{match.matchGroup || match.phase}</div>
+            {match.minute != null || match.period ? (
+              <div className="text-xs text-danger font-display font-bold mt-0.5">
+                {match.period === "HT" ? "ET" : match.period === "FT" ? "Final" : match.minute ? `${match.minute}'` : match.period || ""}
+              </div>
+            ) : (
+              <div className="text-[10px] text-text-muted mt-0.5">{match.matchGroup || match.phase}</div>
+            )}
           </div>
 
           <div className="flex items-center gap-3 flex-1 justify-end">

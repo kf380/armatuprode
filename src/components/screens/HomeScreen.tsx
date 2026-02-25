@@ -311,6 +311,7 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
                 </div>
                 <div className="text-sm font-bold mt-0.5">
                   {lm.teamAFlag} {lm.teamACode} {lm.scoreA ?? 0} - {lm.scoreB ?? 0} {lm.teamBCode} {lm.teamBFlag}
+                  {lm.minute != null && <span className="text-danger ml-2 text-xs">{lm.minute}&apos;</span>}
                 </div>
               </div>
               <div className="text-xs text-text-muted">

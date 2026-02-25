@@ -7,7 +7,6 @@ import { useApp } from "@/lib/store";
 import { useRanking } from "@/lib/hooks";
 import { shareRankingPosition } from "@/lib/share";
 import ShareButton from "@/components/ShareButton";
-import { globalRanking as mockRanking, currentUser as mockUser } from "@/lib/mock-data";
 
 const stagger = {
   hidden: {},
@@ -25,34 +24,22 @@ export default function RankingScreen() {
   const { ranking: apiRanking, userPosition, totalPlayers, loading, error } = useRanking();
   const [filter, setFilter] = useState<RankFilter>("global");
 
-  // Use API ranking or fallback to mock
-  const ranking = useMemo(() => {
-    if (error || (apiRanking.length === 0 && !loading)) return mockRanking;
-    return apiRanking;
-  }, [apiRanking, loading, error]);
+  const ranking = apiRanking;
 
   const user = useMemo(() => {
     if (userPosition) return userPosition;
     if (dbUser) {
       return {
-        position: mockUser.globalRank,
+        position: 0,
         userId: dbUser.id,
         name: dbUser.name,
         avatar: dbUser.avatar,
         country: dbUser.country,
-        points: mockUser.points,
-        level: mockUser.level,
+        points: 0,
+        level: 1,
       };
     }
-    return {
-      position: mockUser.globalRank,
-      userId: "u1",
-      name: mockUser.name,
-      avatar: mockUser.avatar,
-      country: mockUser.country,
-      points: mockUser.points,
-      level: mockUser.level,
-    };
+    return { position: 0, userId: "", name: "Jugador", avatar: "👤", country: "🌍", points: 0, level: 1 };
   }, [userPosition, dbUser]);
 
   if (loading) {
@@ -63,6 +50,20 @@ export default function RankingScreen() {
     );
   }
 
+  if (error || ranking.length === 0) {
+    return (
+      <motion.div className="space-y-5 pb-6" variants={stagger} initial="hidden" animate="show">
+        <motion.div variants={fadeUp} className="pt-2">
+          <h1 className="font-display text-xl font-bold tracking-widest">RANKING</h1>
+        </motion.div>
+        <div className="text-center py-20">
+          <div className="text-4xl mb-3">🏆</div>
+          <p className="text-text-muted">Todavia no hay ranking. Predeci partidos para aparecer!</p>
+        </div>
+      </motion.div>
+    );
+  }
+
   const top3 = ranking.slice(0, 3);
   const rest = ranking.slice(3);
 
@@ -70,7 +71,7 @@ export default function RankingScreen() {
     <motion.div className="space-y-5 pb-6" variants={stagger} initial="hidden" animate="show">
       <motion.div variants={fadeUp} className="pt-2">
         <h1 className="font-display text-xl font-bold tracking-widest">RANKING</h1>
-        <p className="mt-0.5 text-base text-text-secondary">{totalPlayers > 0 ? totalPlayers.toLocaleString() : "142,387"} jugadores</p>
+        <p className="mt-0.5 text-base text-text-secondary">{totalPlayers > 0 ? totalPlayers.toLocaleString() : "0"} jugadores</p>
       </motion.div>
 
       {/* Filters */}

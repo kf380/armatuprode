@@ -516,6 +516,8 @@ export interface LiveMatch {
   teamBFlag: string;
   scoreA: number | null;
   scoreB: number | null;
+  minute: number | null;
+  period: string | null;
   matchGroup: string | null;
   phase: string;
   userPrediction: { scoreA: number; scoreB: number } | null;
