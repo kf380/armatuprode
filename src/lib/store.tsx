@@ -131,31 +131,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setAuthLoading(false);
     }
 
-    // Quick check: if no Supabase token in storage AND not returning from OAuth,
-    // skip to login immediately
-    const hasToken = typeof window !== "undefined" &&
-      Object.keys(localStorage).some((k) => k.startsWith("sb-") && k.endsWith("-auth-token"));
-    const isOAuthReturn = typeof window !== "undefined" &&
-      (document.cookie.includes("sb-") || window.location.hash.includes("access_token"));
-
-    if (!hasToken && !isOAuthReturn) {
-      setScreen("login");
-      setAuthLoading(false);
-    } else {
-      // Has token or returning from OAuth — resolve session from Supabase
-      supabase.auth.getSession().then(async ({ data: { session } }) => {
-        if (session?.user) {
-          await resolveSession(session);
-        } else {
-          setScreen("login");
-          setAuthLoading(false);
-        }
-      }).catch((err) => {
-        console.error("Supabase getSession error:", err);
+    // Always call getSession() — with @supabase/ssr the token lives in cookies,
+    // not localStorage, so we can't shortcut by checking storage.
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        await resolveSession(session);
+      } else {
         setScreen("login");
         setAuthLoading(false);
-      });
-    }
+      }
+    }).catch((err) => {
+      console.error("Supabase getSession error:", err);
+      setScreen("login");
+      setAuthLoading(false);
+    });
 
     // Listen for auth changes (login, logout, token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
