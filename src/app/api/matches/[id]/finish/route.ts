@@ -93,6 +93,17 @@ export async function POST(
       finalPoints = 1;
     }
 
+    // Insurance booster: if user scored 0, refund 150 coins
+    if (finalPoints === 0 && pred.boosterApplied === "insurance" && validActivation) {
+      creditCoins({
+        userId: pred.userId,
+        amount: 150,
+        source: WalletLotSource.WINNER,
+        reason: "insurance_refund",
+        idempotencyKey: `coin_insurance_${id}_${pred.userId}`,
+      }).catch(() => {});
+    }
+
     await prisma.prediction.update({
       where: { id: pred.id },
       data: { points: finalPoints },

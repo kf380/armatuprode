@@ -67,19 +67,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Partido no encontrado" }, { status: 404 });
   }
 
-  // second_chance booster: allow changing up to 30min before match
-  const timeUntilMatch = new Date(match.matchDate).getTime() - Date.now();
-  const THIRTY_MINUTES = 30 * 60 * 1000;
-  const isSecondChance = boosterId === "second_chance" && timeUntilMatch > 0;
-
-  if (boosterId === "second_chance" && timeUntilMatch <= 0) {
-    return NextResponse.json({ error: "El partido ya comenzo" }, { status: 403 });
-  }
-  if (boosterId === "second_chance" && timeUntilMatch < THIRTY_MINUTES) {
-    return NextResponse.json({ error: "Second chance solo se puede usar hasta 30 minutos antes del partido" }, { status: 403 });
-  }
-
-  if (match.status !== "UPCOMING" || (new Date(match.matchDate) <= new Date() && !isSecondChance)) {
+  if (match.status !== "UPCOMING" || new Date(match.matchDate) <= new Date()) {
     return NextResponse.json({ error: "El partido ya comenzo, no se puede predecir" }, { status: 403 });
   }
 
@@ -93,7 +81,7 @@ export async function POST(request: NextRequest) {
 
   // Consume booster if provided (wrapped in transaction to prevent race condition)
   let appliedBooster: string | null = null;
-  if (boosterId && ["x2", "shield", "second_chance"].includes(boosterId)) {
+  if (boosterId && ["x2", "shield", "insurance"].includes(boosterId)) {
     // Anti-exploit: validate match hasn't started server-side
     if (new Date(match.matchDate) <= new Date()) {
       return NextResponse.json({ error: "No se puede activar booster despues del inicio del partido" }, { status: 403 });

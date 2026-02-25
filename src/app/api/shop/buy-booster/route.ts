@@ -6,7 +6,7 @@ import { debitCoins } from "@/lib/wallet";
 const BOOSTER_PRICES: Record<string, number> = {
   x2: 100,
   shield: 150,
-  second_chance: 200,
+  insurance: 200,
 };
 
 export async function POST(request: NextRequest) {

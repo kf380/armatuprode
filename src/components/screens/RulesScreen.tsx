@@ -130,8 +130,8 @@ export default function RulesScreen() {
                 <div className="text-text-muted">Protege tu racha si fallas</div>
               </div>
               <div>
-                <div className="font-bold text-text-primary">Second Chance — (200 coins)</div>
-                <div className="text-text-muted">Permite cambiar prediccion despues del cierre normal</div>
+                <div className="font-bold text-text-primary">Seguro — Insurance (200 coins)</div>
+                <div className="text-text-muted">Si fallas la prediccion, recuperas 150 coins</div>
               </div>
               <div className="mt-2 text-[10px] text-text-muted border-t border-border-default pt-2">
                 Se activan antes del inicio del partido. Maximo 1 booster por partido.

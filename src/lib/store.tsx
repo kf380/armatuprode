@@ -81,7 +81,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [authLoading, setAuthLoading] = useState(true);
   const [coins, setCoins] = useState(350);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [boosters, setBoosters] = useState<Record<string, number>>({ x2: 0, shield: 0, second_chance: 0 });
+  const [boosters, setBoosters] = useState<Record<string, number>>({ x2: 0, shield: 0, insurance: 0 });
   const [poolContributions, setPoolContributions] = useState<Record<string, PoolContribution[]>>({});
   const [liveMatchId, setLiveMatchId] = useState<string | null>(null);
   const [selectedTournamentId, setSelectedTournamentId] = useState<string | null>(null);

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, Zap, Shield, RotateCcw, Coins, Loader2 } from "lucide-react";
+import { ChevronLeft, Zap, Shield, ShieldCheck, Coins, Loader2 } from "lucide-react";
 import { useApp } from "@/lib/store";
 
 const boosterDefs = [
@@ -25,10 +25,10 @@ const boosterDefs = [
     price: 150,
   },
   {
-    id: "second_chance",
-    name: "SEGUNDA CHANCE",
-    description: "Cambia tu prediccion despues del cierre",
-    icon: <RotateCcw size={24} />,
+    id: "insurance",
+    name: "SEGURO",
+    description: "Si fallas, recuperas 150 coins",
+    icon: <ShieldCheck size={24} />,
     color: "text-purple-400",
     bgColor: "bg-purple-400/10 border-purple-400/30",
     price: 200,
