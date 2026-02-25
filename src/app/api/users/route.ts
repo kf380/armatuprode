@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/supabase-server";
+import { creditCoins } from "@/lib/wallet";
+import { WalletLotSource } from "@prisma/client";
 
 export async function POST(request: NextRequest) {
   try {
@@ -44,12 +46,21 @@ export async function POST(request: NextRequest) {
           referralCode,
         },
       });
+
+      // Create wallet with initial 100 coins as a proper WalletLot
+      creditCoins({
+        userId: dbUser.id,
+        amount: 100,
+        source: WalletLotSource.ADMIN,
+        reason: "welcome_bonus",
+        idempotencyKey: `welcome_${dbUser.id}`,
+      }).catch(() => {});
     }
 
     return NextResponse.json({ user: dbUser }, { status: 201 });
   } catch (err) {
     console.error("POST /api/users error:", err);
-    return NextResponse.json({ error: "Error interno", detail: String(err) }, { status: 500 });
+    return NextResponse.json({ error: "Error interno" }, { status: 500 });
   }
 }
 
@@ -87,6 +98,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ user: dbUser });
   } catch (err) {
     console.error("GET /api/users error:", err);
-    return NextResponse.json({ error: "Error interno", detail: String(err) }, { status: 500 });
+    return NextResponse.json({ error: "Error interno" }, { status: 500 });
   }
 }

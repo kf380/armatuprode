@@ -98,6 +98,8 @@ export async function GET(request: NextRequest) {
         teamBFlag: match.teamBFlag,
         scoreA: match.scoreA,
         scoreB: match.scoreB,
+        minute: match.minute,
+        period: match.period,
         matchGroup: match.matchGroup,
         phase: match.phase,
         userPrediction: predMap[match.id]

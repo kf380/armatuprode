@@ -1,8 +1,16 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createNotification } from "@/lib/notifications";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  // Auth: require CRON_SECRET or ADMIN_API_KEY
+  const authHeader = request.headers.get("authorization");
+  const cronSecret = process.env.CRON_SECRET;
+  const adminKey = process.env.ADMIN_API_KEY;
+  const token = authHeader?.replace("Bearer ", "");
+  if (!token || (token !== cronSecret && token !== adminKey)) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
   const now = new Date();
   const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
 

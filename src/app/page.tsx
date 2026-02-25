@@ -19,7 +19,7 @@ import NotificationsScreen from "@/components/screens/NotificationsScreen";
 import RulesScreen from "@/components/screens/RulesScreen";
 
 function DeepLinkHandler() {
-  const { isLoggedIn, setScreen, authLoading } = useApp();
+  const { isLoggedIn, setScreen, authLoading, authFetch } = useApp();
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -47,14 +47,26 @@ function DeepLinkHandler() {
     }
   }, [isLoggedIn, authLoading, setScreen]);
 
-  // After login, check for pending join code
+  // After login, check for pending join code and referral code
   useEffect(() => {
     if (!isLoggedIn) return;
+
     const pendingCode = localStorage.getItem("pendingJoinCode");
     if (pendingCode) {
       setScreen("join-group");
     }
-  }, [isLoggedIn, setScreen]);
+
+    // Apply pending referral code
+    const pendingRef = localStorage.getItem("pendingRefCode");
+    if (pendingRef) {
+      localStorage.removeItem("pendingRefCode");
+      authFetch("/api/users/referral", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: pendingRef }),
+      }).catch(() => {});
+    }
+  }, [isLoggedIn, setScreen, authFetch]);
 
   return null;
 }

@@ -39,7 +39,11 @@ export async function GET(request: NextRequest) {
 
   const totalPredictions = predictions.length;
   const totalPoints = predictions.reduce((sum, p) => sum + p.points, 0);
-  const exactos = predictions.filter((p) => p.points === 3).length;
+  // Count exactos by comparing predicted vs actual scores (works for groups and knockout)
+  const exactos = predictions.filter((p) => {
+    if (p.match.status !== "FINISHED" || p.match.scoreA == null || p.match.scoreB == null) return false;
+    return p.scoreA === p.match.scoreA && p.scoreB === p.match.scoreB;
+  }).length;
 
   // Precision: predictions on finished matches that earned points
   const finishedPredictions = predictions.filter((p) => p.match.status === "FINISHED");

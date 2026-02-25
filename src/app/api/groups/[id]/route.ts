@@ -33,6 +33,12 @@ export async function GET(
     return NextResponse.json({ error: "Grupo no encontrado" }, { status: 404 });
   }
 
+  // Verify user is a member of this group
+  const dbUser = await prisma.user.findUnique({ where: { authId: user.id } });
+  if (!dbUser || !group.members.some((m) => m.userId === dbUser.id)) {
+    return NextResponse.json({ error: "No sos miembro de este grupo" }, { status: 403 });
+  }
+
   const memberIds = group.members.map((m) => m.userId);
   const predictions = await prisma.prediction.findMany({
     where: {

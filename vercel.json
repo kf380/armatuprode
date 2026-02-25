@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/expire-coins",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/matches/check-reminders",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

@@ -56,3 +56,52 @@ export async function GET(request: NextRequest) {
     })),
   });
 }
+
+export async function POST(request: NextRequest) {
+  const authHeader = request.headers.get("authorization");
+  const body = await request.json();
+  const adminKey = authHeader?.replace("Bearer ", "") || body.adminKey;
+
+  if (!adminKey || adminKey !== process.env.ADMIN_API_KEY) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+
+  const {
+    tournamentId,
+    teamACode,
+    teamAName,
+    teamAFlag,
+    teamBCode,
+    teamBName,
+    teamBFlag,
+    matchDate,
+    matchGroup,
+    phase,
+  } = body;
+
+  if (!tournamentId || !teamACode || !teamAName || !teamAFlag || !teamBCode || !teamBName || !teamBFlag || !matchDate) {
+    return NextResponse.json({ error: "Faltan campos requeridos" }, { status: 400 });
+  }
+
+  const tournament = await prisma.tournament.findUnique({ where: { id: tournamentId } });
+  if (!tournament) {
+    return NextResponse.json({ error: "Torneo no encontrado" }, { status: 404 });
+  }
+
+  const match = await prisma.match.create({
+    data: {
+      tournamentId,
+      teamACode,
+      teamAName,
+      teamAFlag,
+      teamBCode,
+      teamBName,
+      teamBFlag,
+      matchDate: new Date(matchDate),
+      matchGroup: matchGroup || null,
+      phase: phase || "GROUP_STAGE",
+    },
+  });
+
+  return NextResponse.json({ match }, { status: 201 });
+}

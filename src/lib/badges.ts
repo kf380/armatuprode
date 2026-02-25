@@ -18,9 +18,14 @@ const badgeDefinitions: BadgeDefinition[] = [
     description: "5 resultados exactos",
     target: 5,
     evaluate: async (userId) => {
-      return prisma.prediction.count({
-        where: { userId, points: { gte: 3 } },
+      // Count exact scores by comparing predicted vs actual
+      const preds = await prisma.prediction.findMany({
+        where: { userId, match: { status: "FINISHED" } },
+        include: { match: { select: { scoreA: true, scoreB: true } } },
       });
+      return preds.filter(
+        (p) => p.match.scoreA != null && p.match.scoreB != null && p.scoreA === p.match.scoreA && p.scoreB === p.match.scoreB
+      ).length;
     },
   },
   {
@@ -51,14 +56,18 @@ const badgeDefinitions: BadgeDefinition[] = [
     evaluate: async (userId) => {
       const memberships = await prisma.groupMember.findMany({
         where: { userId },
-        select: { groupId: true, group: { select: { tournamentId: true } } },
+        select: { groupId: true, group: { select: { tournamentId: true, members: { select: { userId: true } } } } },
       });
 
       let leaderCount = 0;
       for (const m of memberships) {
+        const memberIds = m.group.members.map((gm) => gm.userId);
         const pointsAgg = await prisma.prediction.groupBy({
           by: ["userId"],
-          where: { match: { tournamentId: m.group.tournamentId } },
+          where: {
+            userId: { in: memberIds },
+            match: { tournamentId: m.group.tournamentId },
+          },
           _sum: { points: true },
           orderBy: { _sum: { points: "desc" } },
           take: 1,

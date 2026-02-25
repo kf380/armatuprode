@@ -66,7 +66,8 @@ export async function notifyMatchResults(
   });
 
   for (const pred of predictions) {
-    const isExact = pred.points === 3 || (pred.boosterApplied === "x2" && pred.points === 6);
+    // Detect exact by comparing scores directly (works for groups and knockout)
+    const isExact = pred.scoreA === scoreA && pred.scoreB === scoreB;
     const isCorrect = pred.points > 0;
 
     const icon = isExact ? "🎯" : isCorrect ? "✅" : "❌";

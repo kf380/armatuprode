@@ -55,6 +55,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Puntajes invalidos" }, { status: 400 });
   }
 
+  if (scoreA > 20 || scoreB > 20) {
+    return NextResponse.json({ error: "Puntaje maximo es 20" }, { status: 400 });
+  }
+
   const match = await prisma.match.findUnique({
     where: { id: matchId },
   });
@@ -65,7 +69,15 @@ export async function POST(request: NextRequest) {
 
   // second_chance booster: allow changing up to 30min before match
   const timeUntilMatch = new Date(match.matchDate).getTime() - Date.now();
+  const THIRTY_MINUTES = 30 * 60 * 1000;
   const isSecondChance = boosterId === "second_chance" && timeUntilMatch > 0;
+
+  if (boosterId === "second_chance" && timeUntilMatch <= 0) {
+    return NextResponse.json({ error: "El partido ya comenzo" }, { status: 403 });
+  }
+  if (boosterId === "second_chance" && timeUntilMatch < THIRTY_MINUTES) {
+    return NextResponse.json({ error: "Second chance solo se puede usar hasta 30 minutos antes del partido" }, { status: 403 });
+  }
 
   if (match.status !== "UPCOMING" || (new Date(match.matchDate) <= new Date() && !isSecondChance)) {
     return NextResponse.json({ error: "El partido ya comenzo, no se puede predecir" }, { status: 403 });
@@ -79,7 +91,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Consume booster if provided
+  // Consume booster if provided (wrapped in transaction to prevent race condition)
   let appliedBooster: string | null = null;
   if (boosterId && ["x2", "shield", "second_chance"].includes(boosterId)) {
     // Anti-exploit: validate match hasn't started server-side
@@ -87,32 +99,39 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No se puede activar booster despues del inicio del partido" }, { status: 403 });
     }
 
-    const booster = await prisma.userBooster.findUnique({
-      where: { userId_type: { userId: dbUser.id, type: boosterId } },
-    });
-    if (booster && booster.quantity > 0) {
-      await prisma.userBooster.update({
-        where: { id: booster.id },
-        data: { quantity: { decrement: 1 } },
-      });
-      appliedBooster = boosterId;
+    try {
+      await prisma.$transaction(async (tx) => {
+        const booster = await tx.userBooster.findUnique({
+          where: { userId_type: { userId: dbUser.id, type: boosterId } },
+        });
+        if (!booster || booster.quantity <= 0) {
+          throw new Error("NO_BOOSTER");
+        }
 
-      // Create BoosterActivation record (@@unique prevents double activation)
-      try {
-        await prisma.boosterActivation.create({
+        // Create activation first (unique constraint check)
+        await tx.boosterActivation.create({
           data: {
             userId: dbUser.id,
             matchId,
             type: boosterId,
           },
         });
-      } catch (e: unknown) {
-        // P2002 = unique constraint violation → already has booster for this match
-        if (e && typeof e === "object" && "code" in e && (e as { code: string }).code === "P2002") {
-          return NextResponse.json({ error: "Ya tenes un booster activo para este partido" }, { status: 409 });
-        }
-        throw e;
+
+        // Only decrement after activation succeeds
+        await tx.userBooster.update({
+          where: { id: booster.id },
+          data: { quantity: { decrement: 1 } },
+        });
+      });
+      appliedBooster = boosterId;
+    } catch (e: unknown) {
+      if (e instanceof Error && e.message === "NO_BOOSTER") {
+        return NextResponse.json({ error: "No tenes ese booster" }, { status: 400 });
       }
+      if (e && typeof e === "object" && "code" in e && (e as { code: string }).code === "P2002") {
+        return NextResponse.json({ error: "Ya tenes un booster activo para este partido" }, { status: 409 });
+      }
+      throw e;
     }
   }
 

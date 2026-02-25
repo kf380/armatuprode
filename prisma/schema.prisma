@@ -88,6 +88,8 @@ model Match {
   status       MatchStatus     @default(UPCOMING)
   scoreA       Int?
   scoreB       Int?
+  minute       Int?
+  period       String?
   reminderSent Boolean         @default(false)
 
   qualifiedTeam String?

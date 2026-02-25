@@ -1,7 +1,13 @@
 "use client";
 
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from "react";
-import { PoolContribution } from "@/lib/mock-data";
+interface PoolContribution {
+  userId: string;
+  name: string;
+  avatar: string;
+  paid: boolean;
+  amount: number;
+}
 import { createBrowserClient } from "@/lib/supabase";
 import type { User as SupabaseUser, SupabaseClient } from "@supabase/supabase-js";
 
@@ -159,13 +165,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const contributeToPool = useCallback((groupId: string) => {
+    const currentUserId = dbUser?.id;
+    if (!currentUserId) return;
     setPoolContributions((prev) => ({
       ...prev,
       [groupId]: (prev[groupId] || []).map((c) =>
-        c.userId === "u1" ? { ...c, paid: true } : c
+        c.userId === currentUserId ? { ...c, paid: true } : c
       ),
     }));
-  }, []);
+  }, [dbUser]);
 
   const addBooster = (type: string) => {
     setBoosters((prev) => ({ ...prev, [type]: (prev[type] || 0) + 1 }));

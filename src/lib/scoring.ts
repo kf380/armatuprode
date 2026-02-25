@@ -59,26 +59,57 @@ export interface XpReward {
   reason: string;
 }
 
-export function calculateXpForPrediction(points: number, phase?: string): XpReward[] {
-  const rewards: XpReward[] = [];
-  const knockout = isKnockout(phase);
+export interface PointsBreakdown {
+  total: number;
+  isExact: boolean;
+  isWinner: boolean;
+  qualifierCorrect: boolean;
+}
 
-  // For knockout, base points (without qualifier bonus) determine XP
-  // Exact: 5 (knockout) or 3 (groups) → +50 XP
-  // Winner: 2 (knockout) or 1 (groups) → +20 XP
-  if (knockout) {
-    // points could be 5, 8, 2, 5 (with qualifier), 3 (just qualifier), 0
-    const basePoints = points >= 5 ? 5 : points >= 2 ? 2 : 0;
-    if (basePoints === 5) {
-      rewards.push({ amount: 50, reason: "exact_score" });
-    } else if (basePoints === 2) {
-      rewards.push({ amount: 20, reason: "correct_winner" });
-    }
+export function calculatePointsDetailed(
+  predA: number,
+  predB: number,
+  actualA: number,
+  actualB: number,
+  phase?: string,
+  predictedQualifier?: string | null,
+  actualQualifier?: string | null,
+): PointsBreakdown {
+  const isExact = predA === actualA && predB === actualB;
+  const predResult = Math.sign(predA - predB);
+  const actualResult = Math.sign(actualA - actualB);
+  const isWinner = predResult === actualResult;
+  const qualifierCorrect = !!(predictedQualifier && actualQualifier && predictedQualifier === actualQualifier);
+
+  let total = 0;
+  if (isKnockout(phase)) {
+    if (isExact) total = 5;
+    else if (isWinner) total = 2;
+    if (qualifierCorrect) total += 3;
   } else {
-    if (points === 3) {
-      rewards.push({ amount: 50, reason: "exact_score" });
-    } else if (points === 1) {
-      rewards.push({ amount: 20, reason: "correct_winner" });
+    if (isExact) total = 3;
+    else if (isWinner) total = 1;
+  }
+
+  return { total, isExact, isWinner, qualifierCorrect };
+}
+
+export function calculateXpForPrediction(points: number, phase?: string, isExact?: boolean, isWinner?: boolean): XpReward[] {
+  const rewards: XpReward[] = [];
+
+  if (isExact) {
+    rewards.push({ amount: 50, reason: "exact_score" });
+  } else if (isWinner) {
+    rewards.push({ amount: 20, reason: "correct_winner" });
+  } else if (!isExact && !isWinner) {
+    // Fallback for legacy calls without breakdown: use point thresholds
+    const knockout = isKnockout(phase);
+    if (knockout) {
+      if (points >= 5) rewards.push({ amount: 50, reason: "exact_score" });
+      else if (points === 2) rewards.push({ amount: 20, reason: "correct_winner" });
+    } else {
+      if (points === 3) rewards.push({ amount: 50, reason: "exact_score" });
+      else if (points === 1) rewards.push({ amount: 20, reason: "correct_winner" });
     }
   }
 

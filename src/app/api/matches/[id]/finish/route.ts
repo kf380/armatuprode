@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { calculatePoints, calculateXpForPrediction } from "@/lib/scoring";
+import { calculatePointsDetailed, calculateXpForPrediction } from "@/lib/scoring";
 import { notifyMatchResults, notifyRankingChanges, createChatSystemEvent } from "@/lib/notifications";
 import { evaluateBadges } from "@/lib/badges";
 import { creditCoins } from "@/lib/wallet";
@@ -14,8 +14,11 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  // Auth: accept admin key in Authorization header or body (backwards compat)
+  const authHeader = request.headers.get("authorization");
   const body = await request.json();
-  const { adminKey, scoreA, scoreB, qualifiedTeam } = body;
+  const adminKey = authHeader?.replace("Bearer ", "") || body.adminKey;
+  const { scoreA, scoreB, qualifiedTeam } = body;
 
   if (!adminKey || adminKey !== process.env.ADMIN_API_KEY) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -47,6 +50,8 @@ export async function POST(
       status: "FINISHED",
       scoreA,
       scoreB,
+      minute: null,
+      period: "FT",
       ...(isKnockout(match.phase) && qualifiedTeam ? { qualifiedTeam } : {}),
     },
   });
@@ -60,7 +65,7 @@ export async function POST(
   const knockout = isKnockout(match.phase);
 
   for (const pred of predictions) {
-    const points = calculatePoints(
+    const breakdown = calculatePointsDetailed(
       pred.scoreA,
       pred.scoreB,
       scoreA,
@@ -69,20 +74,24 @@ export async function POST(
       pred.predictedQualifier,
       qualifiedTeam ?? null,
     );
+    const points = breakdown.total;
 
     // Defense-in-depth: verify booster activation is valid
     let boosterMultiplier = 1;
-    if (pred.boosterApplied === "x2") {
-      const activation = await prisma.boosterActivation.findUnique({
-        where: { userId_matchId: { userId: pred.userId, matchId: id } },
-      });
-      // Only apply booster if activation exists and was created before match start
-      if (activation && activation.createdAt < match.matchDate) {
-        boosterMultiplier = 2;
-      }
+    const activation = await prisma.boosterActivation.findUnique({
+      where: { userId_matchId: { userId: pred.userId, matchId: id } },
+    });
+    const validActivation = activation && activation.createdAt < match.matchDate;
+
+    if (pred.boosterApplied === "x2" && validActivation) {
+      boosterMultiplier = 2;
     }
 
-    const finalPoints = points * boosterMultiplier;
+    // Shield booster: if user scored 0 but has shield, give 1pt
+    let finalPoints = points * boosterMultiplier;
+    if (finalPoints === 0 && pred.boosterApplied === "shield" && validActivation) {
+      finalPoints = 1;
+    }
 
     await prisma.prediction.update({
       where: { id: pred.id },
@@ -91,8 +100,8 @@ export async function POST(
 
     userPointsMap.set(pred.userId, finalPoints);
 
-    // Grant XP for the result
-    const xpRewards = calculateXpForPrediction(points, match.phase);
+    // Grant XP for the result (pass breakdown to avoid ambiguous point values)
+    const xpRewards = calculateXpForPrediction(points, match.phase, breakdown.isExact, breakdown.isWinner);
     for (const reward of xpRewards) {
       await prisma.xpEvent.create({
         data: {
@@ -109,12 +118,7 @@ export async function POST(
     }
 
     // Coin rewards based on result
-    const isExact = pred.scoreA === scoreA && pred.scoreB === scoreB;
-    const predResult = Math.sign(pred.scoreA - pred.scoreB);
-    const actualResult = Math.sign(scoreA - scoreB);
-    const isWinner = predResult === actualResult;
-
-    if (isWinner && !isExact) {
+    if (breakdown.isWinner && !breakdown.isExact) {
       // Winner correct: +20 coins (knockout: +20 too)
       creditCoins({
         userId: pred.userId,
@@ -125,7 +129,7 @@ export async function POST(
       }).catch(() => {});
     }
 
-    if (isExact) {
+    if (breakdown.isExact) {
       // Exact: +50 coins
       creditCoins({
         userId: pred.userId,
@@ -137,7 +141,7 @@ export async function POST(
     }
 
     // Knockout: classifier correct bonus coins
-    if (knockout && pred.predictedQualifier && qualifiedTeam && pred.predictedQualifier === qualifiedTeam) {
+    if (knockout && breakdown.qualifierCorrect) {
       creditCoins({
         userId: pred.userId,
         amount: 30,

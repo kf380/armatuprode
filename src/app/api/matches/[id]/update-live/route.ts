@@ -5,8 +5,11 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  // Auth: accept admin key in Authorization header or body (backwards compat)
+  const authHeader = request.headers.get("authorization");
   const body = await request.json();
-  const { adminKey, scoreA, scoreB } = body;
+  const adminKey = authHeader?.replace("Bearer ", "") || body.adminKey;
+  const { scoreA, scoreB, minute, period } = body;
 
   if (!adminKey || adminKey !== process.env.ADMIN_API_KEY) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -19,13 +22,19 @@ export async function POST(
     return NextResponse.json({ error: "Partido no encontrado" }, { status: 404 });
   }
 
-  // Update to LIVE status with current scores
+  if (match.status === "FINISHED") {
+    return NextResponse.json({ error: "Partido ya finalizado, no se puede volver a LIVE" }, { status: 409 });
+  }
+
+  // Update to LIVE status with current scores and optional minute/period
   await prisma.match.update({
     where: { id },
     data: {
       status: "LIVE",
       scoreA: scoreA ?? match.scoreA,
       scoreB: scoreB ?? match.scoreB,
+      ...(minute != null ? { minute } : {}),
+      ...(period ? { period } : {}),
     },
   });
 
