@@ -1,5 +1,5 @@
 /* eslint-disable no-restricted-globals */
-var CACHE_NAME = "armatuprode-v4";
+var CACHE_NAME = "armatuprode-v5";
 var STATIC_ASSETS = [
   "/icon-192.png",
   "/icon-512.png",

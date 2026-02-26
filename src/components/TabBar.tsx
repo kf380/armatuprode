@@ -65,10 +65,17 @@ export default function TabBar({
 
       {/* Mobile: bottom tab bar — icons only */}
       <nav
-        className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-border-default/60 bg-bg-surface/90 backdrop-blur-2xl"
-        style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+        className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-border-default/60"
+        style={{
+          paddingBottom: "env(safe-area-inset-bottom, 0px)",
+          paddingLeft: "env(safe-area-inset-left, 0px)",
+          paddingRight: "env(safe-area-inset-right, 0px)",
+          backgroundColor: "rgba(17, 24, 39, 0.95)",
+          backdropFilter: "blur(24px)",
+          WebkitBackdropFilter: "blur(24px)",
+        }}
       >
-        <div style={{ display: "flex", width: "100%" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)" }}>
           {tabs.map((tab) => {
             const isActive = active === tab.id;
             const Icon = tab.icon;
@@ -78,7 +85,6 @@ export default function TabBar({
                 onClick={() => onChange(tab.id)}
                 aria-label={tab.label}
                 style={{
-                  flex: "1 1 0%",
                   display: "flex",
                   flexDirection: "column",
                   alignItems: "center",
@@ -89,6 +95,7 @@ export default function TabBar({
                   background: "none",
                   border: "none",
                   cursor: "pointer",
+                  WebkitTapHighlightColor: "transparent",
                 }}
               >
                 {isActive && (

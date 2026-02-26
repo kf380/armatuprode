@@ -375,7 +375,7 @@ export default function MatchesScreen() {
               exit={{ y: 300 }}
               transition={{ type: "spring", damping: 25 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-lg rounded-t-3xl md:rounded-3xl border-t border-x md:border border-border-default bg-bg-surface p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:pb-6 md:max-w-md max-h-[90vh] overflow-y-auto"
+              className="w-full rounded-t-3xl md:rounded-3xl border-t border-x md:border border-border-default bg-bg-surface px-4 py-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] md:p-6 md:max-w-md max-h-[85vh] overflow-y-auto"
             >
               {(() => {
                 const match = matches.find((m) => m.id === editingMatch);

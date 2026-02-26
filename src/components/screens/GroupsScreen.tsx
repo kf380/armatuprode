@@ -568,7 +568,7 @@ export default function GroupsScreen() {
             {/* Messages container */}
             <div
               ref={chatContainerRef}
-              className="max-h-[60vh] overflow-y-auto space-y-2 rounded-xl border border-border-default bg-bg-primary p-3"
+              className="max-h-[45vh] md:max-h-[60vh] overflow-y-auto space-y-2 rounded-xl border border-border-default bg-bg-primary p-3"
             >
               {/* Load older */}
               {chatHasOlder && chatMessages.length > 0 && (
@@ -879,7 +879,7 @@ export default function GroupsScreen() {
               exit={{ y: 400 }}
               transition={{ type: "spring", damping: 25 }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-lg rounded-t-3xl md:rounded-3xl border-t border-x md:border border-border-default bg-bg-surface p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] md:pb-6 md:max-w-md max-h-[90vh] overflow-y-auto"
+              className="w-full rounded-t-3xl md:rounded-3xl border-t border-x md:border border-border-default bg-bg-surface px-4 py-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] md:p-6 md:max-w-md max-h-[85vh] overflow-y-auto"
             >
               <h3 className="font-display text-sm font-bold tracking-wider mb-4">CREAR GRUPO</h3>
 

@@ -115,7 +115,7 @@ body::before {
 }
 
 /* Tab bar safe area for mobile */
-.pb-tab { padding-bottom: 5.5rem; }
+.pb-tab { padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px)); }
 
 /* Hide scrollbar for tab bar */
 .scrollbar-none {

@@ -136,7 +136,7 @@ function AppContent() {
       <PaymentToast />
       <DeepLinkHandler />
       {authLoading ? (
-        <main className="mx-auto max-w-lg md:max-w-2xl lg:max-w-4xl px-5 md:px-8 lg:px-12 pt-[calc(1.5rem+env(safe-area-inset-top))] pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-6 md:pt-20">
+        <main className="mx-auto max-w-lg md:max-w-2xl lg:max-w-4xl px-5 md:px-8 lg:px-12 pt-[calc(1.5rem+env(safe-area-inset-top))] pb-[calc(7rem+env(safe-area-inset-bottom))] md:pb-6 md:pt-20">
           <div className="space-y-4 animate-pulse pt-4">
             <div className="h-6 w-40 bg-border-default rounded" />
             <div className="h-4 w-24 bg-border-default/50 rounded" />
@@ -148,7 +148,7 @@ function AppContent() {
           </div>
         </main>
       ) : (
-        <main className="mx-auto max-w-lg md:max-w-2xl lg:max-w-4xl px-5 md:px-8 lg:px-12 pt-[calc(1.5rem+env(safe-area-inset-top))] pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-6 md:pt-20">
+        <main className="mx-auto max-w-lg md:max-w-2xl lg:max-w-4xl px-5 md:px-8 lg:px-12 pt-[calc(1.5rem+env(safe-area-inset-top))] pb-[calc(7rem+env(safe-area-inset-bottom))] md:pb-6 md:pt-20">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}

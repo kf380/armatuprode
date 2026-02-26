@@ -68,7 +68,7 @@ export default function LoginScreen() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-bg-primary px-6 md:mt-12">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-bg-primary px-4 md:px-6 md:mt-12">
       <motion.div
         className="w-full max-w-sm md:max-w-md text-center"
         initial={{ opacity: 0, y: 20 }}
