@@ -43,6 +43,22 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body className="antialiased">
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if('serviceWorker' in navigator){
+                navigator.serviceWorker.getRegistrations().then(function(regs){
+                  regs.forEach(function(r){r.update()});
+                });
+                caches.keys().then(function(names){
+                  names.forEach(function(n){
+                    if(n.indexOf('armatuprode-v5')===-1) caches.delete(n);
+                  });
+                });
+              }
+            `,
+          }}
+        />
         {children}
       </body>
     </html>

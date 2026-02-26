@@ -106,39 +106,39 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
       animate="show"
     >
       {/* Header */}
-      <motion.div variants={fadeUp} className="flex items-center justify-between pt-2">
-        <div className="flex items-center gap-3">
-          <div className="h-11 w-11 rounded-full border-2 border-primary/40 bg-bg-surface flex items-center justify-center text-xl shadow-[0_0_12px_rgba(16,185,129,0.15)]">
+      <motion.div variants={fadeUp} className="flex items-center justify-between gap-2 pt-2 overflow-hidden">
+        <div className="flex items-center gap-2 min-w-0 shrink">
+          <div className="h-10 w-10 shrink-0 rounded-full border-2 border-primary/40 bg-bg-surface flex items-center justify-center text-lg shadow-[0_0_12px_rgba(16,185,129,0.15)]">
             {user.avatar}
           </div>
-          <div>
-            <h1 className="font-display text-base font-bold tracking-widest text-primary">
+          <div className="min-w-0">
+            <h1 className="font-display text-sm font-bold tracking-wider text-primary truncate">
               ARMATUPRODE
             </h1>
-            <p className="text-sm text-text-secondary">
+            <p className="text-xs text-text-secondary truncate">
               Hola, {user.name}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 shrink-0">
           <button
             onClick={() => setScreen("shop")}
-            className="flex items-center gap-1 rounded-full border border-accent/30 bg-accent/10 px-2.5 py-1.5 transition-all hover:bg-accent/20"
+            className="flex items-center gap-1 rounded-full border border-accent/30 bg-accent/10 px-2 py-1 transition-all hover:bg-accent/20"
           >
-            <Coins size={13} className="text-accent" />
-            <span className="font-display text-xs font-bold text-accent">{coins}</span>
+            <Coins size={12} className="text-accent" />
+            <span className="font-display text-[10px] font-bold text-accent">{coins}</span>
           </button>
 
-          <div className="flex items-center gap-1 rounded-full border border-accent/30 bg-accent/10 px-2.5 py-1.5">
-            <span className="text-sm animate-fire">🔥</span>
-            <span className="font-display text-xs font-bold text-accent">{user.streak}</span>
+          <div className="flex items-center gap-0.5 rounded-full border border-accent/30 bg-accent/10 px-2 py-1">
+            <span className="text-xs animate-fire">🔥</span>
+            <span className="font-display text-[10px] font-bold text-accent">{user.streak}</span>
           </div>
 
           <button
             onClick={() => setScreen("notifications")}
-            className="relative h-9 w-9 rounded-full border border-border-default bg-bg-surface flex items-center justify-center text-text-muted hover:text-text-primary transition-colors"
+            className="relative h-8 w-8 shrink-0 rounded-full border border-border-default bg-bg-surface flex items-center justify-center text-text-muted hover:text-text-primary transition-colors"
           >
-            <Bell size={16} />
+            <Bell size={15} />
             {unreadCount > 0 && (
               <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-danger text-[9px] font-bold text-white flex items-center justify-center">
                 {unreadCount}
