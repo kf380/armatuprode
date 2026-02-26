@@ -1,5 +1,5 @@
 /* eslint-disable no-restricted-globals */
-const CACHE_NAME = "armatuprode-v2";
+const CACHE_NAME = "armatuprode-v3";
 const STATIC_ASSETS = [
   "/",
   "/icon-192.png",

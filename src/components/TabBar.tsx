@@ -63,9 +63,12 @@ export default function TabBar({
         </div>
       </nav>
 
-      {/* Mobile: bottom tab bar */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-border-default/60 bg-bg-surface/90 backdrop-blur-2xl">
-        <div className="grid grid-cols-5 pt-2 pb-2">
+      {/* Mobile: bottom tab bar — icons only */}
+      <nav
+        className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-border-default/60 bg-bg-surface/90 backdrop-blur-2xl"
+        style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+      >
+        <div style={{ display: "flex", width: "100%" }}>
           {tabs.map((tab) => {
             const isActive = active === tab.id;
             const Icon = tab.icon;
@@ -74,38 +77,50 @@ export default function TabBar({
                 key={tab.id}
                 onClick={() => onChange(tab.id)}
                 aria-label={tab.label}
-                className="relative flex flex-col items-center gap-0.5 py-1 transition-all"
+                style={{
+                  flex: "1 1 0%",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  paddingTop: "10px",
+                  paddingBottom: "10px",
+                  position: "relative",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                }}
               >
                 {isActive && (
                   <motion.div
                     layoutId="tab-indicator"
-                    className="absolute -top-2 h-[3px] w-8 rounded-full bg-primary"
-                    style={{ boxShadow: "0 0 12px rgba(16,185,129,0.5)" }}
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      left: "50%",
+                      transform: "translateX(-50%)",
+                      height: "3px",
+                      width: "32px",
+                      borderRadius: "9999px",
+                      backgroundColor: "var(--primary)",
+                      boxShadow: "0 0 12px rgba(16,185,129,0.5)",
+                    }}
                     transition={{ type: "spring", stiffness: 500, damping: 30 }}
                   />
                 )}
                 <Icon
-                  size={20}
+                  size={24}
                   strokeWidth={isActive ? 2.5 : 1.8}
-                  className={`transition-colors ${
-                    isActive
-                      ? "text-primary drop-shadow-[0_0_8px_rgba(16,185,129,0.4)]"
-                      : "text-text-muted"
-                  }`}
+                  style={{
+                    color: isActive ? "var(--primary)" : "var(--text-muted)",
+                    filter: isActive ? "drop-shadow(0 0 8px rgba(16,185,129,0.4))" : "none",
+                    transition: "color 0.2s, filter 0.2s",
+                  }}
                 />
-                <span
-                  className={`text-[9px] font-bold tracking-wide uppercase font-display transition-colors ${
-                    isActive ? "text-primary" : "text-text-muted"
-                  }`}
-                >
-                  {tab.label}
-                </span>
               </button>
             );
           })}
         </div>
-        {/* Safe area for iPhone */}
-        <div className="h-[env(safe-area-inset-bottom)]" />
       </nav>
     </>
   );
