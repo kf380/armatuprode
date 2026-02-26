@@ -65,7 +65,7 @@ export default function TabBar({
 
       {/* Mobile: bottom tab bar */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-border-default/60 bg-bg-surface/90 backdrop-blur-2xl">
-        <div className="mx-auto flex max-w-lg items-center justify-around px-4 pt-2.5 pb-3">
+        <div className="mx-auto flex items-center justify-around px-1 pt-2 pb-2">
           {tabs.map((tab) => {
             const isActive = active === tab.id;
             const Icon = tab.icon;
@@ -74,12 +74,12 @@ export default function TabBar({
                 key={tab.id}
                 onClick={() => onChange(tab.id)}
                 aria-label={tab.label}
-                className="relative flex flex-col items-center gap-1 px-4 py-1 transition-all"
+                className="relative flex flex-col items-center gap-0.5 min-w-0 flex-1 py-1 transition-all"
               >
                 {isActive && (
                   <motion.div
                     layoutId="tab-indicator"
-                    className="absolute -top-2.5 h-[3px] w-10 rounded-full bg-primary"
+                    className="absolute -top-2 h-[3px] w-8 rounded-full bg-primary"
                     style={{ boxShadow: "0 0 12px rgba(16,185,129,0.5)" }}
                     transition={{ type: "spring", stiffness: 500, damping: 30 }}
                   />
@@ -94,7 +94,7 @@ export default function TabBar({
                   }`}
                 />
                 <span
-                  className={`text-[11px] font-bold tracking-widest uppercase font-display transition-colors ${
+                  className={`text-[9px] font-bold tracking-wider uppercase font-display transition-colors truncate max-w-full ${
                     isActive ? "text-primary" : "text-text-muted"
                   }`}
                 >
