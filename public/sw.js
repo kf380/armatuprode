@@ -1,13 +1,12 @@
 /* eslint-disable no-restricted-globals */
-const CACHE_NAME = "armatuprode-v3";
-const STATIC_ASSETS = [
-  "/",
+var CACHE_NAME = "armatuprode-v4";
+var STATIC_ASSETS = [
   "/icon-192.png",
   "/icon-512.png",
   "/manifest.json",
 ];
 
-// Install: cache static assets
+// Install: cache only icons/manifest, skip waiting immediately
 self.addEventListener("install", function (event) {
   event.waitUntil(
     caches.open(CACHE_NAME).then(function (cache) {
@@ -17,40 +16,35 @@ self.addEventListener("install", function (event) {
   self.skipWaiting();
 });
 
-// Activate: clean old caches
+// Activate: delete ALL old caches
 self.addEventListener("activate", function (event) {
   event.waitUntil(
     caches.keys().then(function (keys) {
       return Promise.all(
-        keys.filter(function (k) { return k !== CACHE_NAME; }).map(function (k) { return caches.delete(k); })
+        keys.map(function (k) {
+          if (k !== CACHE_NAME) return caches.delete(k);
+        })
       );
     })
   );
   self.clients.claim();
 });
 
-// Fetch: network-first for API, cache-first for static
+// Fetch: always network-first for pages and JS/CSS
 self.addEventListener("fetch", function (event) {
+  // Skip non-GET
+  if (event.request.method !== "GET") return;
+
   var url = new URL(event.request.url);
 
-  // Skip non-GET and API requests
-  if (event.request.method !== "GET") return;
+  // Skip API requests entirely
   if (url.pathname.startsWith("/api/")) return;
 
-  // For navigation requests: network first, fallback to cache
-  if (event.request.mode === "navigate") {
-    event.respondWith(
-      fetch(event.request).catch(function () {
-        return caches.match("/");
-      })
-    );
-    return;
-  }
-
-  // For static assets: stale-while-revalidate
+  // For navigation and app assets: ALWAYS network first
   event.respondWith(
-    caches.match(event.request).then(function (cached) {
-      var fetchPromise = fetch(event.request).then(function (response) {
+    fetch(event.request)
+      .then(function (response) {
+        // Cache successful responses for offline fallback
         if (response && response.status === 200) {
           var clone = response.clone();
           caches.open(CACHE_NAME).then(function (cache) {
@@ -58,11 +52,13 @@ self.addEventListener("fetch", function (event) {
           });
         }
         return response;
-      }).catch(function () {
-        return cached;
-      });
-      return cached || fetchPromise;
-    })
+      })
+      .catch(function () {
+        // Offline: try cache
+        return caches.match(event.request).then(function (cached) {
+          return cached || (event.request.mode === "navigate" ? caches.match("/") : undefined);
+        });
+      })
   );
 });
 
