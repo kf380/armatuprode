@@ -3,9 +3,8 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Share2, Copy, ChevronLeft, MessageCircle, Trophy, BarChart3, CheckCircle2, Circle, DollarSign, Loader2, Send, SmilePlus, X, Trash2, Flag, VolumeX } from "lucide-react";
-import { groups as mockGroups } from "@/lib/mock-data";
 import { useApp } from "@/lib/store";
-import { useGroups, useGroupDetail, useGroupActivity, useGroupChat } from "@/lib/hooks";
+import { useGroups, useGroupDetail, useGroupActivity, useGroupChat, usePublicConfig } from "@/lib/hooks";
 import { STICKERS_BY_CATEGORY, type Sticker } from "@/lib/stickers";
 import { getGroupInviteContent, getRankingContent, shareGroupInvite } from "@/lib/share";
 import ShareButton from "@/components/ShareButton";
@@ -37,7 +36,9 @@ function formatChatTime(iso: string): string {
 
 export default function GroupsScreen() {
   const { authFetch, dbUser } = useApp();
-  const { groups: apiGroups, loading: groupsLoading, error: groupsError, refetch: refetchGroups } = useGroups();
+  const { groups: apiGroups, loading: groupsLoading, refetch: refetchGroups } = useGroups();
+  const { config } = usePublicConfig();
+  const realMoneyEnabled = config.flags.enableRealMoneyPools;
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
   const { detail, loading: detailLoading } = useGroupDetail(selectedGroup);
   const { events: activityEvents, loading: activityLoading, loadMore, hasMore } = useGroupActivity(selectedGroup);
@@ -85,11 +86,17 @@ export default function GroupsScreen() {
   const [createName, setCreateName] = useState("");
   const [createEmoji, setCreateEmoji] = useState("🏆");
 
-  // Groups for display - API data with fallback to mock
+  // Banner error for failed actions (replaces alert())
+  const [bannerError, setBannerError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!bannerError) return;
+    const t = setTimeout(() => setBannerError(null), 5000);
+    return () => clearTimeout(t);
+  }, [bannerError]);
+
+  // Groups for display - API data only. No mock fallback to avoid showing
+  // fake data in production when the API fails.
   const displayGroups = useMemo(() => {
-    if (groupsError || (apiGroups.length === 0 && !groupsLoading)) {
-      return mockGroups;
-    }
     return apiGroups.map((g) => ({
       id: g.id,
       name: g.name,
@@ -106,7 +113,7 @@ export default function GroupsScreen() {
       poolDistribution: [50, 30, 20] as [number, number, number],
       inviteCode: g.inviteCode,
     }));
-  }, [apiGroups, groupsLoading, groupsError]);
+  }, [apiGroups]);
 
   // Fetch pool data when detail loads and has pool
   const fetchPoolData = useCallback(async (groupId: string) => {
@@ -162,7 +169,7 @@ export default function GroupsScreen() {
         }
       }
       if (!tournamentId) {
-        alert("No se encontro un torneo activo");
+        setBannerError("No se encontró un torneo activo");
         setCreating(false);
         return;
       }
@@ -181,8 +188,8 @@ export default function GroupsScreen() {
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        alert(data.error || "Error al crear grupo");
+        const data = await res.json().catch(() => ({}));
+        setBannerError(data.error || "Error al crear grupo");
         setCreating(false);
         return;
       }
@@ -194,7 +201,7 @@ export default function GroupsScreen() {
       setCreateEmoji("🏆");
       refetchGroups();
     } catch {
-      alert("Error de conexion");
+      setBannerError("Error de conexión");
     }
     setCreating(false);
   };
@@ -205,6 +212,10 @@ export default function GroupsScreen() {
     if (payingEntry) return;
 
     if (currency === "ARS") {
+      if (!realMoneyEnabled) {
+        setBannerError("Los pozos con dinero real no están habilitados todavía.");
+        return;
+      }
       // Real money payment via MercadoPago
       setPayingEntry(true);
       try {
@@ -217,29 +228,20 @@ export default function GroupsScreen() {
           const data = await res.json();
           window.location.href = data.initPoint;
         } else {
-          const data = await res.json();
-          alert(data.error || "Error al iniciar el pago");
+          const data = await res.json().catch(() => ({}));
+          setBannerError(data.error || "Error al iniciar el pago");
           setPayingEntry(false);
         }
       } catch {
-        alert("Error de conexion");
+        setBannerError("Error de conexión");
         setPayingEntry(false);
       }
     } else {
-      // Coins payment — existing flow
-      try {
-        const res = await authFetch(`/api/groups/${groupId}/pool`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-        });
-        if (res.ok) {
-          setJustPaid(true);
-          setTimeout(() => setJustPaid(false), 2500);
-          fetchPoolData(groupId);
-        }
-      } catch {
-        alert("Error al registrar pago");
-      }
+      // Coins-as-pool-entry path is disabled until properly implemented as a
+      // wallet debit with idempotency. Surface a clear message.
+      setBannerError(
+        "Los pozos en coins están temporalmente deshabilitados. Usá un pozo en ARS.",
+      );
     }
   };
 
@@ -308,8 +310,8 @@ export default function GroupsScreen() {
           />
         </div>
 
-        {/* Pool section */}
-        {groupHasPool && (
+        {/* Pool section — only when real-money pools are enabled by flag */}
+        {groupHasPool && realMoneyEnabled && (
           <div className="space-y-3">
             <div className="rounded-xl border border-accent/30 bg-accent/5 p-4">
               <div className="text-xs font-display tracking-widest text-accent/70 mb-1 text-center">POZO ACUMULADO</div>
@@ -823,13 +825,18 @@ export default function GroupsScreen() {
 
   return (
     <motion.div className="space-y-5 pb-6" variants={stagger} initial="hidden" animate="show">
+      {bannerError && (
+        <div className="rounded-xl border border-danger/40 bg-danger/10 px-4 py-3 text-xs text-danger">
+          {bannerError}
+        </div>
+      )}
       <motion.div variants={fadeUp} className="flex items-center justify-between pt-2">
         <div>
           <h1 className="font-display text-xl font-bold tracking-widest">MIS GRUPOS</h1>
           <p className="mt-0.5 text-base text-text-secondary">{displayGroups.length} grupos activos</p>
         </div>
         <button
-          onClick={() => setShowCreate(true)}
+          onClick={() => { window.location.href = "/organizer/create"; }}
           className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 font-display text-xs font-bold tracking-wider text-bg-primary transition-all hover:bg-primary/90 active:scale-[0.97]"
         >
           <Plus size={14} /> CREAR
@@ -853,7 +860,7 @@ export default function GroupsScreen() {
                 </div>
               </div>
             </div>
-            {group.hasPool && (
+            {group.hasPool && realMoneyEnabled && (
               <div className="mt-2 flex items-center gap-1.5 text-xs text-accent">
                 <BarChart3 size={12} />
                 Pozo: ${group.poolAmount.toLocaleString()} {group.currency}

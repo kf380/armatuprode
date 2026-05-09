@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/supabase-server";
+import { rateLimit, hashSecret } from "@/lib/ratelimit";
+import { adminKeyFromRequest, isValidAdmin } from "@/lib/admin-auth";
+import { logAdminAction } from "@/lib/admin-audit";
 
 export async function GET(request: NextRequest) {
   const { user } = await getAuthUser(request);
@@ -30,14 +33,16 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  const body = await request.json();
-  const adminKey = authHeader?.replace("Bearer ", "") || body.adminKey;
-
-  if (!adminKey || adminKey !== process.env.ADMIN_API_KEY) {
+  const adminKey = adminKeyFromRequest(request);
+  if (!isValidAdmin(adminKey)) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const adminRl = await rateLimit("adminByKey", hashSecret(adminKey!));
+  if (!adminRl.ok) {
+    return NextResponse.json({ error: "Rate limited" }, { status: 429 });
+  }
 
+  const body = await request.json();
   const { name, type, startDate, endDate } = body;
 
   if (!name || !startDate || !endDate) {
@@ -52,6 +57,12 @@ export async function POST(request: NextRequest) {
       endDate: new Date(endDate),
       active: true,
     },
+  });
+
+  await logAdminAction(request, "create_tournament", adminKey, {
+    tournamentId: tournament.id,
+    name,
+    type: type || "WORLD_CUP",
   });
 
   return NextResponse.json({ tournament }, { status: 201 });

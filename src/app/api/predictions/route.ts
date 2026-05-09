@@ -4,6 +4,8 @@ import { getAuthUser } from "@/lib/supabase-server";
 import { createActivityEvent, createChatSystemEvent } from "@/lib/notifications";
 import { creditCoins } from "@/lib/wallet";
 import { WalletLotSource } from "@prisma/client";
+import { log, logSettled } from "@/lib/log";
+import { rateLimit } from "@/lib/ratelimit";
 
 export async function GET(request: NextRequest) {
   const { user } = await getAuthUser(request);
@@ -34,6 +36,14 @@ export async function POST(request: NextRequest) {
 
   if (!user) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+
+  const rl = await rateLimit("predictions", user.id);
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: "Demasiadas predicciones, esperá un momento" },
+      { status: 429 },
+    );
   }
 
   const dbUser = await prisma.user.findUnique({
@@ -153,6 +163,9 @@ export async function POST(request: NextRequest) {
     },
   });
 
+  if (!existing) {
+    log("info", "prediction_created", { userId: dbUser.id, matchId, scoreA, scoreB });
+  }
   // Grant +10 XP and +10 coins for new predictions only
   if (!existing) {
     await prisma.xpEvent.create({
@@ -163,45 +176,60 @@ export async function POST(request: NextRequest) {
       data: { xp: { increment: 10 } },
     });
 
-    // +10 coins for new prediction
-    creditCoins({
-      userId: dbUser.id,
-      amount: 10,
-      source: WalletLotSource.PREDICTION,
-      reason: "prediction_made",
-      idempotencyKey: `coin_pred_${matchId}_${dbUser.id}`,
-    }).catch(() => {});
+    // +10 coins for new prediction. Idempotent by coin_pred_<matchId>_<userId>.
+    // Awaited so we don't lose coins to serverless promise truncation.
+    await logSettled(
+      "predictions_side_effects_failed",
+      { userId: dbUser.id, matchId },
+      [
+        creditCoins({
+          userId: dbUser.id,
+          amount: 10,
+          source: WalletLotSource.PREDICTION,
+          reason: "prediction_made",
+          idempotencyKey: `coin_pred_${matchId}_${dbUser.id}`,
+        }),
+      ],
+    );
 
-    // Create activity events in user's groups
+    // Activity events + chat system events: gather and await as a batch.
     const memberships = await prisma.groupMember.findMany({
       where: { userId: dbUser.id },
       include: { group: true },
     });
 
+    const sideEffects: Promise<unknown>[] = [];
+    const timeUntil = new Date(match.matchDate).getTime() - Date.now();
+    const closingSoon = timeUntil > 0 && timeUntil < 5 * 60 * 1000;
+
     for (const m of memberships) {
-      if (m.group.tournamentId === match.tournamentId) {
+      if (m.group.tournamentId !== match.tournamentId) continue;
+      sideEffects.push(
         createActivityEvent({
           groupId: m.groupId,
           userId: dbUser.id,
           type: "prediction",
           text: `hizo su prediccion para ${match.teamAName} vs ${match.teamBName}`,
           icon: "⚽",
-        }).catch(() => {});
-      }
-    }
-
-    // Chat system event if match starts in <5 min
-    const timeUntil = new Date(match.matchDate).getTime() - Date.now();
-    if (timeUntil > 0 && timeUntil < 5 * 60 * 1000) {
-      for (const m of memberships) {
-        if (m.group.tournamentId === match.tournamentId) {
+        }),
+      );
+      if (closingSoon) {
+        sideEffects.push(
           createChatSystemEvent(
             m.groupId,
             `Predicciones cerradas: ${match.teamACode} vs ${match.teamBCode}`,
             "🔒",
-          ).catch(() => {});
-        }
+          ),
+        );
       }
+    }
+
+    if (sideEffects.length > 0) {
+      await logSettled(
+        "predictions_chat_events_failed",
+        { userId: dbUser.id, matchId },
+        sideEffects,
+      );
     }
   }
 

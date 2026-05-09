@@ -47,6 +47,12 @@ export default function ShopScreen() {
   const [ownedBoosters, setOwnedBoosters] = useState<Record<string, number>>({});
   const [loadingInventory, setLoadingInventory] = useState(true);
   const [buying, setBuying] = useState(false);
+  const [bannerError, setBannerError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!bannerError) return;
+    const t = setTimeout(() => setBannerError(null), 5000);
+    return () => clearTimeout(t);
+  }, [bannerError]);
 
   const fetchInventory = useCallback(async () => {
     try {
@@ -86,11 +92,11 @@ export default function ShopScreen() {
         setPurchased(boosterId);
         setTimeout(() => setPurchased(null), 1500);
       } else {
-        const data = await res.json();
-        alert(data.error || "Error al comprar");
+        const data = await res.json().catch(() => ({}));
+        setBannerError(data.error || "Error al comprar");
       }
     } catch {
-      alert("Error de conexion");
+      setBannerError("Error de conexión");
     }
     setBuying(false);
   };
@@ -110,12 +116,12 @@ export default function ShopScreen() {
         const data = await res.json();
         window.location.href = data.initPoint;
       } else {
-        const data = await res.json();
-        alert(data.error || "Error al iniciar el pago");
+        const data = await res.json().catch(() => ({}));
+        setBannerError(data.error || "Error al iniciar el pago");
         setBuyingCoins(false);
       }
     } catch {
-      alert("Error de conexion");
+      setBannerError("Error de conexión");
       setBuyingCoins(false);
     }
   };
@@ -130,6 +136,11 @@ export default function ShopScreen() {
 
   return (
     <div className="min-h-screen bg-bg-primary px-5 md:px-8 pt-[calc(1.5rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))] mx-auto max-w-lg md:max-w-2xl lg:max-w-4xl">
+      {bannerError && (
+        <div className="mb-4 rounded-xl border border-danger/40 bg-danger/10 px-4 py-3 text-xs text-danger">
+          {bannerError}
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <button

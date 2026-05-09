@@ -114,7 +114,26 @@ function DeepLinkHandler() {
 }
 
 function AppContent() {
-  const { screen, activeTab, setActiveTab, authLoading } = useApp();
+  const { screen, activeTab, setActiveTab, authLoading, isLoggedIn } = useApp();
+
+  // Anon visitors with no intent (no deep-link, no post-payment, no post-login
+  // redirect) get the public landing instead of the auth screen. Visitors with
+  // ?join=, ?ref=, ?next= or ?payment= keep the existing flow because they
+  // already have purpose.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (authLoading) return;
+    if (isLoggedIn) return;
+    const params = new URLSearchParams(window.location.search);
+    const hasIntent =
+      params.has("next") ||
+      params.has("join") ||
+      params.has("ref") ||
+      params.has("payment");
+    if (!hasIntent) {
+      window.location.replace("/landing");
+    }
+  }, [authLoading, isLoggedIn]);
 
   const handleNavigate = (tab: string) => {
     setActiveTab(tab);

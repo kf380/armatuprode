@@ -5,6 +5,10 @@ import { notifyMatchResults, notifyRankingChanges, createChatSystemEvent } from 
 import { evaluateBadges } from "@/lib/badges";
 import { creditCoins } from "@/lib/wallet";
 import { WalletLotSource } from "@prisma/client";
+import { log, logSettled } from "@/lib/log";
+import { rateLimit, hashSecret } from "@/lib/ratelimit";
+import { adminKeyFromRequest, isValidAdmin } from "@/lib/admin-auth";
+import { logAdminAction } from "@/lib/admin-audit";
 
 function isKnockout(phase: string): boolean {
   return phase !== "GROUP_STAGE";
@@ -14,15 +18,17 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  // Auth: accept admin key in Authorization header or body (backwards compat)
-  const authHeader = request.headers.get("authorization");
-  const body = await request.json();
-  const adminKey = authHeader?.replace("Bearer ", "") || body.adminKey;
-  const { scoreA, scoreB, qualifiedTeam } = body;
-
-  if (!adminKey || adminKey !== process.env.ADMIN_API_KEY) {
+  // Auth: admin key from Authorization header OR admin_session cookie.
+  const adminKey = adminKeyFromRequest(request);
+  if (!isValidAdmin(adminKey)) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const adminRl = await rateLimit("adminByKey", hashSecret(adminKey!));
+  if (!adminRl.ok) {
+    return NextResponse.json({ error: "Rate limited" }, { status: 429 });
+  }
+  const body = await request.json();
+  const { scoreA, scoreB, qualifiedTeam } = body;
 
   if (scoreA == null || scoreB == null || scoreA < 0 || scoreB < 0) {
     return NextResponse.json({ error: "Scores invalidos" }, { status: 400 });
@@ -30,31 +36,60 @@ export async function POST(
 
   const { id } = await params;
 
-  const match = await prisma.match.findUnique({
-    where: { id },
-    include: { tournament: true },
-  });
-
-  if (!match) {
-    return NextResponse.json({ error: "Partido no encontrado" }, { status: 404 });
-  }
-
-  if (match.status === "FINISHED") {
-    return NextResponse.json({ error: "Partido ya finalizado" }, { status: 409 });
-  }
-
-  // Update match to FINISHED (include qualifiedTeam for knockout)
-  await prisma.match.update({
-    where: { id },
+  // Two-phase lock so a crashed scoring can be retried.
+  // Phase A: claim `scoringLockedAt` atomically. Status stays !=FINISHED.
+  // Phase C (end of handler): flip status to FINISHED.
+  // If anything between A and C crashes, the next /finish call will see
+  // scoringLockedAt set and refuse — *unless* the lock is stale (>10 min).
+  // Stale locks can be released via /api/admin/match/[id]/release-lock.
+  const STALE_LOCK_MS = 10 * 60 * 1000;
+  const now = new Date();
+  const staleCutoff = new Date(now.getTime() - STALE_LOCK_MS);
+  const claimed = await prisma.match.updateMany({
+    where: {
+      id,
+      status: { not: "FINISHED" },
+      OR: [
+        { scoringLockedAt: null },
+        { scoringLockedAt: { lt: staleCutoff } },
+      ],
+    },
     data: {
-      status: "FINISHED",
       scoreA,
       scoreB,
       minute: null,
       period: "FT",
-      ...(isKnockout(match.phase) && qualifiedTeam ? { qualifiedTeam } : {}),
+      scoringLockedAt: now,
     },
   });
+  if (claimed.count === 0) {
+    const existing = await prisma.match.findUnique({ where: { id } });
+    if (!existing) {
+      return NextResponse.json({ error: "Partido no encontrado" }, { status: 404 });
+    }
+    log("warn", "match_scoring_lock_conflict", { matchId: id, status: existing.status });
+    return NextResponse.json(
+      { error: "Partido ya finalizado o scoring en curso" },
+      { status: 409 },
+    );
+  }
+  log("info", "match_scoring_started", { matchId: id, scoreA, scoreB });
+
+  // Re-fetch the freshly-updated match for the rest of the handler.
+  const match = await prisma.match.findUniqueOrThrow({
+    where: { id },
+    include: { tournament: true },
+  });
+
+  // For knockout, set qualifiedTeam in a follow-up (kept separate from the
+  // lock claim to keep the test-and-set statement tight).
+  if (isKnockout(match.phase) && qualifiedTeam) {
+    await prisma.match.update({
+      where: { id },
+      data: { qualifiedTeam },
+    });
+    match.qualifiedTeam = qualifiedTeam;
+  }
 
   // Score all predictions for this match
   const predictions = await prisma.prediction.findMany({
@@ -93,15 +128,21 @@ export async function POST(
       finalPoints = 1;
     }
 
+    // Per-prediction credit promises — collected and awaited at end of iteration
+    // so we avoid losing coins to serverless promise truncation.
+    const coinPromises: Promise<unknown>[] = [];
+
     // Insurance booster: if user scored 0, refund 150 coins
     if (finalPoints === 0 && pred.boosterApplied === "insurance" && validActivation) {
-      creditCoins({
-        userId: pred.userId,
-        amount: 150,
-        source: WalletLotSource.WINNER,
-        reason: "insurance_refund",
-        idempotencyKey: `coin_insurance_${id}_${pred.userId}`,
-      }).catch(() => {});
+      coinPromises.push(
+        creditCoins({
+          userId: pred.userId,
+          amount: 150,
+          source: WalletLotSource.WINNER,
+          reason: "insurance_refund",
+          idempotencyKey: `coin_insurance_${id}_${pred.userId}`,
+        }),
+      );
     }
 
     await prisma.prediction.update({
@@ -131,35 +172,41 @@ export async function POST(
     // Coin rewards based on result
     if (breakdown.isWinner && !breakdown.isExact) {
       // Winner correct: +20 coins (knockout: +20 too)
-      creditCoins({
-        userId: pred.userId,
-        amount: 20,
-        source: WalletLotSource.WINNER,
-        reason: "correct_winner",
-        idempotencyKey: `coin_winner_${id}_${pred.userId}`,
-      }).catch(() => {});
+      coinPromises.push(
+        creditCoins({
+          userId: pred.userId,
+          amount: 20,
+          source: WalletLotSource.WINNER,
+          reason: "correct_winner",
+          idempotencyKey: `coin_winner_${id}_${pred.userId}`,
+        }),
+      );
     }
 
     if (breakdown.isExact) {
       // Exact: +50 coins
-      creditCoins({
-        userId: pred.userId,
-        amount: 50,
-        source: WalletLotSource.EXACT,
-        reason: "exact_score",
-        idempotencyKey: `coin_exact_${id}_${pred.userId}`,
-      }).catch(() => {});
+      coinPromises.push(
+        creditCoins({
+          userId: pred.userId,
+          amount: 50,
+          source: WalletLotSource.EXACT,
+          reason: "exact_score",
+          idempotencyKey: `coin_exact_${id}_${pred.userId}`,
+        }),
+      );
     }
 
     // Knockout: classifier correct bonus coins
     if (knockout && breakdown.qualifierCorrect) {
-      creditCoins({
-        userId: pred.userId,
-        amount: 30,
-        source: WalletLotSource.WINNER,
-        reason: "correct_qualifier",
-        idempotencyKey: `coin_qualifier_${id}_${pred.userId}`,
-      }).catch(() => {});
+      coinPromises.push(
+        creditCoins({
+          userId: pred.userId,
+          amount: 30,
+          source: WalletLotSource.WINNER,
+          reason: "correct_qualifier",
+          idempotencyKey: `coin_qualifier_${id}_${pred.userId}`,
+        }),
+      );
     }
 
     // Check streak (last 5 finished predictions all with points > 0)
@@ -193,15 +240,27 @@ export async function POST(
           });
 
           // +100 coins for streak
-          creditCoins({
-            userId: pred.userId,
-            amount: 100,
-            source: WalletLotSource.STREAK,
-            reason: "streak_5",
-            idempotencyKey: `coin_streak_${id}_${pred.userId}`,
-          }).catch(() => {});
+          coinPromises.push(
+            creditCoins({
+              userId: pred.userId,
+              amount: 100,
+              source: WalletLotSource.STREAK,
+              reason: "streak_5",
+              idempotencyKey: `coin_streak_${id}_${pred.userId}`,
+            }),
+          );
         }
       }
+    }
+
+    // Await this prediction's coin credits before moving on. Sequential between
+    // predictions keeps DB pool sane; small batch (≤4 promises) within iteration.
+    if (coinPromises.length > 0) {
+      await logSettled(
+        "finish_coin_credit_failed",
+        { matchId: id, userId: pred.userId },
+        coinPromises,
+      );
     }
   }
 
@@ -221,6 +280,7 @@ export async function POST(
 
   const allFinished = sameDay.every((m) => m.status === "FINISHED" || m.id === id);
 
+  const matchdayCoinPromises: Promise<unknown>[] = [];
   if (allFinished && sameDay.length > 1) {
     for (const [userId] of userPointsMap) {
       const userDayPredictions = await prisma.prediction.findMany({
@@ -244,35 +304,71 @@ export async function POST(
         });
 
         // +20 coins for matchday complete
-        creditCoins({
-          userId,
-          amount: 20,
-          source: WalletLotSource.MATCHDAY,
-          reason: "matchday_complete",
-          idempotencyKey: `coin_matchday_${id}_${userId}`,
-        }).catch(() => {});
+        matchdayCoinPromises.push(
+          creditCoins({
+            userId,
+            amount: 20,
+            source: WalletLotSource.MATCHDAY,
+            reason: "matchday_complete",
+            idempotencyKey: `coin_matchday_${id}_${userId}`,
+          }),
+        );
       }
     }
   }
-
-  // Evaluate badges for affected users (fire-and-forget)
-  for (const [userId] of userPointsMap) {
-    evaluateBadges(userId, match.tournamentId).catch(() => {});
+  if (matchdayCoinPromises.length > 0) {
+    await logSettled(
+      "finish_matchday_coin_failed",
+      { matchId: id },
+      matchdayCoinPromises,
+    );
   }
 
-  // Send notifications (fire-and-forget)
-  notifyMatchResults(id, scoreA, scoreB, match.teamAName, match.teamBName).catch(() => {});
-  notifyRankingChanges(id, match.tournamentId).catch(() => {});
+  // Badges + notifications + chat events: gather and await with structured logs.
+  const tailPromises: Promise<unknown>[] = [];
+  for (const [userId] of userPointsMap) {
+    tailPromises.push(evaluateBadges(userId, match.tournamentId));
+  }
+  tailPromises.push(notifyMatchResults(id, scoreA, scoreB, match.teamAName, match.teamBName));
+  tailPromises.push(notifyRankingChanges(id, match.tournamentId));
 
-  // Chat system events: notify all groups for this tournament (fire-and-forget)
-  prisma.group.findMany({ where: { tournamentId: match.tournamentId } })
-    .then((groups) => {
+  // Chat system events: notify all groups for this tournament
+  tailPromises.push(
+    (async () => {
+      const groups = await prisma.group.findMany({ where: { tournamentId: match.tournamentId } });
       const text = `Partido terminado: ${match.teamAName} ${scoreA}-${scoreB} ${match.teamBName}`;
-      for (const g of groups) {
-        createChatSystemEvent(g.id, text, "⚽").catch(() => {});
-      }
-    })
-    .catch(() => {});
+      await Promise.allSettled(
+        groups.map((g) => createChatSystemEvent(g.id, text, "⚽")),
+      );
+    })(),
+  );
+
+  await logSettled(
+    "finish_tail_side_effects_failed",
+    { matchId: id, tournamentId: match.tournamentId },
+    tailPromises,
+  );
+
+  // Phase C: only NOW flip status to FINISHED. If we crash before this, the
+  // lock is stale-able (10min) and the operator can re-run /finish or release.
+  await prisma.match.update({
+    where: { id },
+    data: { status: "FINISHED" },
+  });
+
+  log("info", "match_scoring_finished", {
+    matchId: id,
+    predictionsScored: predictions.length,
+    finalScoreA: scoreA,
+    finalScoreB: scoreB,
+  });
+  await logAdminAction(request, "finish_match", adminKey, {
+    matchId: id,
+    scoreA,
+    scoreB,
+    qualifiedTeam: qualifiedTeam ?? null,
+    predictionsScored: predictions.length,
+  });
 
   return NextResponse.json({
     scored: predictions.length,

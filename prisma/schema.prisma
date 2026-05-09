@@ -44,17 +44,21 @@ model User {
 }
 
 model Tournament {
-  id        String          @id @default(uuid())
-  name      String
-  type      TournamentType  @default(WORLD_CUP)
-  phase     TournamentPhase @default(GROUP_STAGE)
-  startDate DateTime
-  endDate   DateTime
-  active    Boolean         @default(true)
-  createdAt DateTime        @default(now())
+  id            String          @id @default(uuid())
+  slug          String?         @unique
+  name          String
+  year          Int?
+  hostCountries String[]        @default([])
+  type          TournamentType  @default(WORLD_CUP)
+  phase         TournamentPhase @default(GROUP_STAGE)
+  startDate     DateTime
+  endDate       DateTime
+  active        Boolean         @default(true)
+  createdAt     DateTime        @default(now())
 
   matches Match[]
   groups  Group[]
+  teams   Team[]
 }
 
 enum TournamentType {
@@ -68,30 +72,40 @@ enum TournamentType {
 
 enum TournamentPhase {
   GROUP_STAGE
+  ROUND_OF_32
   ROUND_OF_16
   QUARTER_FINALS
   SEMI_FINALS
+  THIRD_PLACE
   FINAL
 }
 
 model Match {
-  id           String          @id @default(uuid())
-  tournamentId String
-  teamACode    String
-  teamAName    String
-  teamAFlag    String
-  teamBCode    String
-  teamBName    String
-  teamBFlag    String
-  matchDate    DateTime
-  matchGroup   String?
-  phase        TournamentPhase @default(GROUP_STAGE)
-  status       MatchStatus     @default(UPCOMING)
-  scoreA       Int?
-  scoreB       Int?
-  minute       Int?
-  period       String?
-  reminderSent Boolean         @default(false)
+  id                   String          @id @default(uuid())
+  tournamentId         String
+  officialMatchNumber  Int?
+  teamACode            String
+  teamAName            String
+  teamAFlag            String
+  teamBCode            String
+  teamBName            String
+  teamBFlag            String
+  matchDate            DateTime
+  matchGroup           String?
+  phase                TournamentPhase @default(GROUP_STAGE)
+  status               MatchStatus     @default(UPCOMING)
+  scoreA               Int?
+  scoreB               Int?
+  minute               Int?
+  period               String?
+  reminderSent         Boolean         @default(false)
+  venue                String?
+  city                 String?
+  country              String?
+  source               String?
+
+  // Scoring lock — set atomically by /finish to prevent concurrent scoring.
+  scoringLockedAt DateTime?
 
   qualifiedTeam String?
 
@@ -100,8 +114,12 @@ model Match {
   xpEvents           XpEvent[]
   boosterActivations BoosterActivation[]
 
+  @@unique([tournamentId, officialMatchNumber])
   @@index([tournamentId, status])
+  @@index([tournamentId, phase])
+  @@index([tournamentId, matchGroup])
   @@index([matchDate])
+  @@index([status, matchDate])
 }
 
 enum MatchStatus {
@@ -142,15 +160,135 @@ model Group {
   currency         String   @default("ARS")
   createdAt        DateTime @default(now())
 
-  tournament     Tournament         @relation(fields: [tournamentId], references: [id])
-  members        GroupMember[]
-  contributions  PoolContribution[]
-  activityEvents ActivityEvent[]
-  chatMessages   ChatMessage[]
-  chatMutes      ChatMute[]
+  // --- B2B evolution ---
+  type                  GroupType             @default(PERSONAL)
+  organizationId        String?
+  planType              PlanType              @default(FREE)
+  status                GroupStatus           @default(ACTIVE)
+  isPremium             Boolean               @default(false)
+  participantLimit      Int                   @default(10)
+  prizeType             PrizeType             @default(NONE)
+  prizeDescription      String?
+  rulesDescription      String?
+  publicJoinEnabled     Boolean               @default(false)
+  brandingConfig        Json?
+  billingStatus         String?
+  paymentResponsibility PaymentResponsibility @default(NONE)
+
+  // --- Phase 2: Manual Pool ---
+  // Default NONE keeps the legacy behavior: organizer pays plan, no pool.
+  // MANUAL_POOL means the organizer declares an entry amount and the platform
+  // displays the pool informationally; the platform never custodies money.
+  moneyMode             MoneyMode  @default(NONE)
+  declaredPoolEntry     Int?       // ARS amount per player (informative)
+  declaredPoolCurrency  String?    @default("ARS")
+  declaredPoolUpdatedAt DateTime?
+
+  tournament      Tournament            @relation(fields: [tournamentId], references: [id])
+  organization    Organization?         @relation(fields: [organizationId], references: [id])
+  members         GroupMember[]
+  contributions   PoolContribution[]
+  poolTrackings   PoolPaymentTracking[]
+  activityEvents  ActivityEvent[]
+  chatMessages    ChatMessage[]
+  chatMutes       ChatMute[]
 
   @@index([inviteCode])
   @@index([tournamentId])
+  @@index([organizationId])
+  @@index([status])
+  @@index([type, planType])
+}
+
+enum GroupType {
+  PERSONAL
+  ORGANIZATION
+}
+
+/// MoneyMode controls how money flows around a Group.
+///   NONE          → organizer pays plan; players join free; manual prize.
+///                   This is the default and the only mode active until
+///                   Phase 2 ships.
+///   MANUAL_POOL   → organizer declares an entry amount + suggested pool.
+///                   The platform shows the pool informationally and tracks
+///                   who paid (organizer-marked), but NEVER custodies or
+///                   distributes the money. Pricing for the organizer becomes
+///                   USD 5 base + 7% of declared pool (capped USD 400).
+///   AUTOMATED_POOL → reserved for Phase 4 (regulated jurisdictions only).
+///                    NOT enabled. Requires legal sign-off + KYC + license.
+enum MoneyMode {
+  NONE
+  MANUAL_POOL
+  AUTOMATED_POOL
+}
+
+enum PlanType {
+  FREE
+  PERSONAL_PLUS
+  COMMUNITY
+  BUSINESS
+  WHITE_LABEL
+}
+
+enum GroupStatus {
+  DRAFT
+  PENDING_PAYMENT
+  ACTIVE
+  PAUSED
+  FINISHED
+  CANCELLED
+  PAYMENT_FAILED
+  PAYMENT_REVERSED
+}
+
+enum PaymentResponsibility {
+  NONE
+  ORGANIZER
+  COMPANY
+}
+
+enum PrizeType {
+  NONE
+  MANUAL_FIXED
+  SPONSOR
+}
+
+model Organization {
+  id            String       @id @default(uuid())
+  slug          String       @unique
+  name          String
+  logoUrl       String?
+  description   String?
+  ownerId       String
+  plan          PlanType     @default(FREE)
+  billingStatus String?
+  maxPlayers    Int          @default(10)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  members OrganizationMember[]
+  groups  Group[]
+
+  @@index([ownerId])
+}
+
+model OrganizationMember {
+  id             String       @id @default(uuid())
+  organizationId String
+  userId         String
+  role           OrgMemberRole @default(PLAYER)
+  createdAt      DateTime     @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+}
+
+enum OrgMemberRole {
+  OWNER
+  ADMIN
+  PLAYER
 }
 
 model GroupMember {
@@ -172,17 +310,40 @@ enum GroupRole {
 }
 
 model PoolContribution {
-  id      String    @id @default(uuid())
-  userId  String
-  groupId String
-  amount  Int
-  paid    Boolean   @default(false)
-  paidAt  DateTime?
+  id         String    @id @default(uuid())
+  userId     String
+  groupId    String
+  amount     Int
+  paid       Boolean   @default(false)
+  paidAt     DateTime?
+  refundedAt DateTime?
 
   user  User  @relation(fields: [userId], references: [id])
   group Group @relation(fields: [groupId], references: [id])
 
   @@unique([userId, groupId])
+}
+
+/// PoolPaymentTracking is the Phase-2 (MANUAL_POOL) registro of who the
+/// organizer marked as "paid". This table records intent, NOT actual money
+/// movement — the organizer collects entry fees by their own means
+/// (transfer/cash/MP-of-organizer) and uses this table as a shared dashboard.
+/// ArmaTuProde never custodies the pool money.
+model PoolPaymentTracking {
+  id          String    @id @default(uuid())
+  groupId     String
+  userId      String
+  paid        Boolean   @default(false)
+  paidAt      DateTime?
+  markedById  String
+  note        String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  group Group @relation(fields: [groupId], references: [id])
+
+  @@unique([groupId, userId])
+  @@index([groupId])
 }
 
 model XpEvent {
@@ -397,11 +558,13 @@ enum PaymentStatus {
   APPROVED
   REJECTED
   REFUNDED
+  CHARGEBACK
 }
 
 enum PaymentType {
   COIN_PACK
   POOL_ENTRY
+  GROUP_ACTIVATION
 }
 
 model PaymentOrder {
@@ -420,4 +583,39 @@ model PaymentOrder {
   user User @relation(fields: [userId], references: [id])
 
   @@index([userId, createdAt])
+}
+
+// --- Tournament data ---
+
+model Team {
+  id            String  @id @default(uuid())
+  tournamentId  String
+  code          String
+  name          String
+  country       String
+  flag          String  @default("")
+  confederation String?
+  groupCode     String?
+  groupSlot     Int?
+  isPlaceholder Boolean @default(false)
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id])
+
+  @@unique([tournamentId, code])
+  @@index([tournamentId, groupCode])
+}
+
+// --- Admin audit log ---
+
+model AdminAuditLog {
+  id        String   @id @default(uuid())
+  action    String
+  adminHash String?
+  ip        String?
+  userAgent String?
+  payload   Json?
+  createdAt DateTime @default(now())
+
+  @@index([action, createdAt])
+  @@index([createdAt])
 }

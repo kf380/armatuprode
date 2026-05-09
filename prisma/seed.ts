@@ -1,5 +1,6 @@
 import "dotenv/config";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, MatchStatus, TournamentPhase } from "@prisma/client";
+import { TOURNAMENT, TEAMS, MATCHES } from "../src/data/worldcup-2026";
 
 const prisma = new PrismaClient({
   datasources: {
@@ -7,97 +8,171 @@ const prisma = new PrismaClient({
   },
 });
 
-async function main() {
-  // Clean existing data
-  await prisma.prediction.deleteMany();
-  await prisma.poolContribution.deleteMany();
-  await prisma.groupMember.deleteMany();
-  await prisma.group.deleteMany();
-  await prisma.match.deleteMany();
-  await prisma.tournament.deleteMany();
+const STAGE_TO_PHASE: Record<string, TournamentPhase> = {
+  GROUP_STAGE: TournamentPhase.GROUP_STAGE,
+  ROUND_OF_32: TournamentPhase.ROUND_OF_32,
+  ROUND_OF_16: TournamentPhase.ROUND_OF_16,
+  QUARTER_FINALS: TournamentPhase.QUARTER_FINALS,
+  SEMI_FINALS: TournamentPhase.SEMI_FINALS,
+  THIRD_PLACE: TournamentPhase.THIRD_PLACE,
+  FINAL: TournamentPhase.FINAL,
+};
 
-  // Create tournament
-  const tournament = await prisma.tournament.create({
-    data: {
-      name: "Mundial 2026",
+async function main() {
+  console.log(`[seed] Mundial 2026 → upserting tournament ${TOURNAMENT.slug}`);
+
+  // 1. Tournament: idempotent upsert by slug.
+  const tournament = await prisma.tournament.upsert({
+    where: { slug: TOURNAMENT.slug },
+    update: {
+      name: TOURNAMENT.name,
+      year: TOURNAMENT.year,
+      hostCountries: [...TOURNAMENT.hostCountries],
       type: "WORLD_CUP",
-      phase: "GROUP_STAGE",
-      startDate: new Date("2026-06-11"),
-      endDate: new Date("2026-07-19"),
+      startDate: new Date(TOURNAMENT.startDateUtc),
+      endDate: new Date(TOURNAMENT.endDateUtc),
+      active: true,
+    },
+    create: {
+      slug: TOURNAMENT.slug,
+      name: TOURNAMENT.name,
+      year: TOURNAMENT.year,
+      hostCountries: [...TOURNAMENT.hostCountries],
+      type: "WORLD_CUP",
+      startDate: new Date(TOURNAMENT.startDateUtc),
+      endDate: new Date(TOURNAMENT.endDateUtc),
       active: true,
     },
   });
 
-  // Create matches (aligned with mock-data)
-  await prisma.match.createMany({
-    data: [
-      {
-        tournamentId: tournament.id,
-        teamACode: "ARG", teamAName: "Argentina", teamAFlag: "🇦🇷",
-        teamBCode: "BRA", teamBName: "Brasil", teamBFlag: "🇧🇷",
-        matchDate: new Date("2026-06-08T21:00:00-03:00"),
-        matchGroup: "Grupo A", phase: "GROUP_STAGE", status: "UPCOMING",
-      },
-      {
-        tournamentId: tournament.id,
-        teamACode: "MEX", teamAName: "México", teamAFlag: "🇲🇽",
-        teamBCode: "ALE", teamBName: "Alemania", teamBFlag: "🇩🇪",
-        matchDate: new Date("2026-06-08T16:00:00-03:00"),
-        matchGroup: "Grupo B", phase: "GROUP_STAGE", status: "UPCOMING",
-      },
-      {
-        tournamentId: tournament.id,
-        teamACode: "ESP", teamAName: "España", teamAFlag: "🇪🇸",
-        teamBCode: "JPN", teamBName: "Japón", teamBFlag: "🇯🇵",
-        matchDate: new Date("2026-06-08T13:00:00-03:00"),
-        matchGroup: "Grupo C", phase: "GROUP_STAGE", status: "UPCOMING",
-      },
-      {
-        tournamentId: tournament.id,
-        teamACode: "FRA", teamAName: "Francia", teamAFlag: "🇫🇷",
-        teamBCode: "SEN", teamBName: "Senegal", teamBFlag: "🇸🇳",
-        matchDate: new Date("2026-06-09T19:00:00-03:00"),
-        matchGroup: "Grupo D", phase: "GROUP_STAGE", status: "UPCOMING",
-      },
-      {
-        tournamentId: tournament.id,
-        teamACode: "ING", teamAName: "Inglaterra", teamAFlag: "🏴󠁧󠁢󠁥󠁮󠁧󠁿",
-        teamBCode: "USA", teamBName: "Estados Unidos", teamBFlag: "🇺🇸",
-        matchDate: new Date("2026-06-09T16:00:00-03:00"),
-        matchGroup: "Grupo E", phase: "GROUP_STAGE", status: "UPCOMING",
-      },
-      {
-        tournamentId: tournament.id,
-        teamACode: "POR", teamAName: "Portugal", teamAFlag: "🇵🇹",
-        teamBCode: "URU", teamBName: "Uruguay", teamBFlag: "🇺🇾",
-        matchDate: new Date("2026-06-09T13:00:00-03:00"),
-        matchGroup: "Grupo F", phase: "GROUP_STAGE", status: "UPCOMING",
-      },
-      {
-        tournamentId: tournament.id,
-        teamACode: "ARG", teamAName: "Argentina", teamAFlag: "🇦🇷",
-        teamBCode: "MEX", teamBName: "México", teamBFlag: "🇲🇽",
-        matchDate: new Date("2026-06-06T21:00:00-03:00"),
-        matchGroup: "Grupo A", phase: "GROUP_STAGE", status: "FINISHED",
-        scoreA: 2, scoreB: 1,
-      },
-      {
-        tournamentId: tournament.id,
-        teamACode: "BRA", teamAName: "Brasil", teamAFlag: "🇧🇷",
-        teamBCode: "SER", teamBName: "Serbia", teamBFlag: "🇷🇸",
-        matchDate: new Date("2026-06-06T16:00:00-03:00"),
-        matchGroup: "Grupo A", phase: "GROUP_STAGE", status: "FINISHED",
-        scoreA: 2, scoreB: 0,
-      },
-    ],
+  // 2. Teams: 48 entries, idempotent upsert by (tournamentId, code).
+  // First, remove orphan teams whose codes are no longer in the data file
+  // (e.g. placeholder TBD-* teams replaced by real qualifiers after the draw).
+  const validCodes = TEAMS.map((t) => t.code);
+  const orphans = await prisma.team.deleteMany({
+    where: {
+      tournamentId: tournament.id,
+      code: { notIn: validCodes },
+    },
   });
+  let teamsCreated = 0;
+  let teamsUpdated = 0;
+  for (const t of TEAMS) {
+    const existing = await prisma.team.findUnique({
+      where: { tournamentId_code: { tournamentId: tournament.id, code: t.code } },
+    });
+    if (existing) {
+      await prisma.team.update({
+        where: { id: existing.id },
+        data: {
+          name: t.name,
+          country: t.country,
+          flag: t.flag,
+          confederation: t.confederation,
+          groupCode: t.groupCode,
+          groupSlot: t.groupSlot,
+          isPlaceholder: t.isPlaceholder,
+        },
+      });
+      teamsUpdated++;
+    } else {
+      await prisma.team.create({
+        data: {
+          tournamentId: tournament.id,
+          code: t.code,
+          name: t.name,
+          country: t.country,
+          flag: t.flag,
+          confederation: t.confederation,
+          groupCode: t.groupCode,
+          groupSlot: t.groupSlot,
+          isPlaceholder: t.isPlaceholder,
+        },
+      });
+      teamsCreated++;
+    }
+  }
 
-  console.log("Seed completed: 1 tournament + 8 matches");
+  // 3. Matches: 104 entries, keyed by (tournamentId, officialMatchNumber).
+  // - LIVE / FINISHED matches are NEVER overwritten (preserves real results).
+  // - UPCOMING matches: refresh teams/date/venue/source so admin can re-seed
+  //   after fixing fixture data without losing predictions.
+  let matchesCreated = 0;
+  let matchesUpdated = 0;
+  let matchesPreserved = 0;
+  for (const m of MATCHES) {
+    const existing = await prisma.match.findUnique({
+      where: {
+        tournamentId_officialMatchNumber: {
+          tournamentId: tournament.id,
+          officialMatchNumber: m.officialMatchNumber,
+        },
+      },
+    });
+    if (existing) {
+      if (existing.status === MatchStatus.LIVE || existing.status === MatchStatus.FINISHED) {
+        matchesPreserved++;
+        continue;
+      }
+      await prisma.match.update({
+        where: { id: existing.id },
+        data: {
+          teamACode: m.teamACode,
+          teamAName: m.teamAName,
+          teamAFlag: m.teamAFlag,
+          teamBCode: m.teamBCode,
+          teamBName: m.teamBName,
+          teamBFlag: m.teamBFlag,
+          matchDate: new Date(m.matchDateUtc),
+          matchGroup: m.group,
+          phase: STAGE_TO_PHASE[m.stage],
+          venue: m.venue,
+          city: m.city,
+          country: m.country,
+          source: m.source,
+        },
+      });
+      matchesUpdated++;
+    } else {
+      await prisma.match.create({
+        data: {
+          tournamentId: tournament.id,
+          officialMatchNumber: m.officialMatchNumber,
+          teamACode: m.teamACode,
+          teamAName: m.teamAName,
+          teamAFlag: m.teamAFlag,
+          teamBCode: m.teamBCode,
+          teamBName: m.teamBName,
+          teamBFlag: m.teamBFlag,
+          matchDate: new Date(m.matchDateUtc),
+          matchGroup: m.group,
+          phase: STAGE_TO_PHASE[m.stage],
+          status: MatchStatus.UPCOMING,
+          venue: m.venue,
+          city: m.city,
+          country: m.country,
+          source: m.source,
+        },
+      });
+      matchesCreated++;
+    }
+  }
+
+  console.log("[seed] done", {
+    tournamentSlug: tournament.slug,
+    teams: { created: teamsCreated, updated: teamsUpdated, orphansRemoved: orphans.count, total: TEAMS.length },
+    matches: {
+      created: matchesCreated,
+      updated: matchesUpdated,
+      preserved: matchesPreserved,
+      total: MATCHES.length,
+    },
+  });
 }
 
 main()
   .catch((e) => {
-    console.error(e);
+    console.error("[seed] failed", e);
     process.exit(1);
   })
   .finally(() => prisma.$disconnect());

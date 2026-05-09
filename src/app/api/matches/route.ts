@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/supabase-server";
+import { rateLimit, hashSecret } from "@/lib/ratelimit";
+import { adminKeyFromRequest, isValidAdmin } from "@/lib/admin-auth";
+import { logAdminAction } from "@/lib/admin-audit";
 
 export async function GET(request: NextRequest) {
   const { user } = await getAuthUser(request);
@@ -49,23 +52,45 @@ export async function GET(request: NextRequest) {
       name: tournament.name,
       type: tournament.type,
       phase: tournament.phase,
+      slug: tournament.slug,
+      hostCountries: tournament.hostCountries,
     },
     matches: tournament.matches.map((m) => ({
-      ...m,
+      id: m.id,
+      tournamentId: m.tournamentId,
+      officialMatchNumber: m.officialMatchNumber,
+      teamACode: m.teamACode,
+      teamAName: m.teamAName,
+      teamAFlag: m.teamAFlag,
+      teamBCode: m.teamBCode,
+      teamBName: m.teamBName,
+      teamBFlag: m.teamBFlag,
+      matchDate: m.matchDate,
+      matchGroup: m.matchGroup,
+      phase: m.phase,
+      status: m.status,
+      scoreA: m.scoreA,
+      scoreB: m.scoreB,
+      qualifiedTeam: m.qualifiedTeam,
+      venue: m.venue,
+      city: m.city,
+      country: m.country,
       prediction: predictions[m.id] ?? null,
     })),
   });
 }
 
 export async function POST(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  const body = await request.json();
-  const adminKey = authHeader?.replace("Bearer ", "") || body.adminKey;
-
-  if (!adminKey || adminKey !== process.env.ADMIN_API_KEY) {
+  const adminKey = adminKeyFromRequest(request);
+  if (!isValidAdmin(adminKey)) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const adminRl = await rateLimit("adminByKey", hashSecret(adminKey!));
+  if (!adminRl.ok) {
+    return NextResponse.json({ error: "Rate limited" }, { status: 429 });
+  }
 
+  const body = await request.json();
   const {
     tournamentId,
     teamACode,
@@ -101,6 +126,14 @@ export async function POST(request: NextRequest) {
       matchGroup: matchGroup || null,
       phase: phase || "GROUP_STAGE",
     },
+  });
+
+  await logAdminAction(request, "create_match", adminKey, {
+    matchId: match.id,
+    tournamentId,
+    teams: `${teamACode} vs ${teamBCode}`,
+    matchDate,
+    phase: phase || "GROUP_STAGE",
   });
 
   return NextResponse.json({ match }, { status: 201 });

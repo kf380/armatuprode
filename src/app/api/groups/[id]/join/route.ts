@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/supabase-server";
 import { createActivityEvent } from "@/lib/notifications";
+import { logSettled } from "@/lib/log";
+import { canJoinGroup } from "@/lib/group-policy";
 
 export async function POST(
   request: NextRequest,
@@ -50,6 +52,13 @@ export async function POST(
     return NextResponse.json({ error: "Ya sos miembro de este grupo" }, { status: 409 });
   }
 
+  // Status + capacity policy check (centralized in lib/group-policy).
+  const memberCount = await prisma.groupMember.count({ where: { groupId: id } });
+  const policy = canJoinGroup(group, memberCount);
+  if (!policy.ok) {
+    return NextResponse.json({ error: policy.reason }, { status: policy.status });
+  }
+
   const member = await prisma.groupMember.create({
     data: {
       userId: dbUser.id,
@@ -58,14 +67,20 @@ export async function POST(
     },
   });
 
-  // Create activity event
-  createActivityEvent({
-    groupId: id,
-    userId: dbUser.id,
-    type: "join",
-    text: "se unio al grupo",
-    icon: "👋",
-  }).catch(() => {});
+  // Create activity event — awaited so we don't lose it in serverless promise truncation.
+  await logSettled(
+    "group_join_activity_failed",
+    { groupId: id, userId: dbUser.id },
+    [
+      createActivityEvent({
+        groupId: id,
+        userId: dbUser.id,
+        type: "join",
+        text: "se unio al grupo",
+        icon: "👋",
+      }),
+    ],
+  );
 
   return NextResponse.json({ member }, { status: 201 });
 }

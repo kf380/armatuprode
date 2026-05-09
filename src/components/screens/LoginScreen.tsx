@@ -4,6 +4,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { useApp } from "@/lib/store";
 import { createBrowserClient } from "@/lib/supabase";
+import { CheckBallLogo } from "@/components/CheckBallLogo";
 
 export default function LoginScreen() {
   const { setScreen } = useApp();
@@ -76,7 +77,9 @@ export default function LoginScreen() {
         transition={{ duration: 0.5 }}
       >
         {/* Logo */}
-        <div className="text-6xl mb-4">⚽</div>
+        <div className="flex justify-center mb-4">
+          <CheckBallLogo size={88} />
+        </div>
         <h1 className="font-display text-2xl font-bold tracking-[0.2em] text-primary mb-2">
           ARMATUPRODE
         </h1>
@@ -161,7 +164,14 @@ export default function LoginScreen() {
           </div>
         )}
 
-        <p className="mt-8 text-xs text-text-muted leading-relaxed">
+        <p className="mt-6 text-xs text-text-muted">
+          ¿No conocés ArmaTuProde?{" "}
+          <a href="/landing" className="text-primary underline">
+            Ver cómo funciona
+          </a>
+        </p>
+
+        <p className="mt-4 text-xs text-text-muted leading-relaxed">
           Al continuar aceptas los{" "}
           <a href="/terms" className="text-primary underline">terminos y condiciones</a>
           {" "}y la{" "}

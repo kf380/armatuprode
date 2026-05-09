@@ -19,7 +19,7 @@ export default function PrivacyPage() {
         POLITICA DE PRIVACIDAD
       </h1>
       <p className="text-xs text-text-muted mb-8">
-        Ultima actualizacion: 25 de febrero de 2026
+        Ultima actualizacion: 9 de mayo de 2026
       </p>
 
       <div className="space-y-6 text-sm text-text-secondary leading-relaxed">
@@ -60,7 +60,7 @@ export default function PrivacyPage() {
           </h2>
           <ul className="list-disc pl-5 space-y-1">
             <li>Proveer y mantener el servicio de ArmatuProde.</li>
-            <li>Procesar compras de coins y entradas a pozos de grupo.</li>
+            <li>Procesar pagos de planes del organizador y compras de coins.</li>
             <li>Enviar notificaciones push sobre partidos y actividad de grupos (si lo autorizas).</li>
             <li>Generar rankings y estadisticas dentro de los grupos.</li>
             <li>Mejorar la experiencia del usuario y corregir errores.</li>

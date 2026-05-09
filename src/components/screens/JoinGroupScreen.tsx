@@ -2,44 +2,67 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Users, Trophy, ArrowRight, Loader2 } from "lucide-react";
+import { Users, Trophy, ArrowRight, Loader2, Lock, AlertTriangle } from "lucide-react";
 import { useApp } from "@/lib/store";
+import { usePublicConfig } from "@/lib/hooks";
+import type { ApiGroupStatus, ApiGroupKind, ApiPlanType, ApiPrizeType } from "@/lib/hooks";
+import { CheckBallLogo } from "@/components/CheckBallLogo";
 
 interface InviteGroupInfo {
   id: string;
   name: string;
   emoji: string;
   tournament: string;
-  members: number;
+  memberCount: number;
   createdBy: string;
+  inviteCode: string;
+  // B2B
+  type: ApiGroupKind;
+  planType: ApiPlanType;
+  status: ApiGroupStatus;
+  isPremium: boolean;
+  participantLimit: number;
+  prizeType: ApiPrizeType;
+  prizeDescription: string | null;
+  rulesDescription: string | null;
+  publicJoinEnabled: boolean;
+  organization: { name: string; logoUrl: string | null; slug: string } | null;
+  // Legacy (only displayed when ENABLE_REAL_MONEY_POOLS=true)
   hasPool: boolean;
-  poolAmount: number;
   entryFee: number;
   currency: string;
-  inviteCode: string;
 }
 
+const STATUS_BLOCK_MESSAGE: Record<Exclude<ApiGroupStatus, "ACTIVE">, string> = {
+  DRAFT: "Este prode todavía no fue activado.",
+  PENDING_PAYMENT: "Este prode todavía no está activo. El organizador está completando el pago de activación.",
+  PAUSED: "Este prode está pausado por el organizador.",
+  FINISHED: "Este prode ya finalizó.",
+  CANCELLED: "Este prode fue cancelado.",
+  PAYMENT_FAILED: "El pago de activación falló. Pedile al organizador que vuelva a intentar.",
+  PAYMENT_REVERSED: "Este prode está pausado por un problema de pago.",
+};
+
 export default function JoinGroupScreen() {
-  const { setScreen, setActiveTab, authFetch, isLoggedIn } = useApp();
+  const { setScreen, setActiveTab, authFetch } = useApp();
+  const { config } = usePublicConfig();
   const [joined, setJoined] = useState(false);
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [groupInfo, setGroupInfo] = useState<InviteGroupInfo | null>(null);
+  const [logoFailed, setLogoFailed] = useState(false);
 
-  // Read invite code from URL or localStorage
   const inviteCode = typeof window !== "undefined"
     ? new URLSearchParams(window.location.search).get("join") || localStorage.getItem("pendingJoinCode")
     : null;
 
-  // Fetch group info by invite code
   useEffect(() => {
     if (!inviteCode) {
       setLoading(false);
       return;
     }
 
-    // Clear from URL without reload
     if (typeof window !== "undefined" && window.location.search.includes("join=")) {
       const url = new URL(window.location.href);
       url.searchParams.delete("join");
@@ -68,6 +91,7 @@ export default function JoinGroupScreen() {
 
   const handleJoin = async () => {
     if (!groupInfo) return;
+    if (groupInfo.status !== "ACTIVE") return;
 
     setJoining(true);
     try {
@@ -78,9 +102,8 @@ export default function JoinGroupScreen() {
       });
 
       if (!res.ok) {
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         if (res.status === 409) {
-          // Already a member, just go to groups
           setJoined(true);
           setTimeout(() => {
             setActiveTab("groups");
@@ -89,7 +112,7 @@ export default function JoinGroupScreen() {
           setJoining(false);
           return;
         }
-        setError(data.error || "Error al unirse al grupo");
+        setError(data.error || "Error al unirse al prode");
         setJoining(false);
         return;
       }
@@ -100,21 +123,9 @@ export default function JoinGroupScreen() {
         setScreen("main");
       }, 2000);
     } catch {
-      setError("Error de conexion");
+      setError("Error de conexión");
     }
     setJoining(false);
-  };
-
-  // Fallback group data if no invite code
-  const group = groupInfo || {
-    name: "Grupo",
-    emoji: "🏆",
-    tournament: "Mundial 2026",
-    members: 0,
-    createdBy: "",
-    hasPool: false,
-    poolAmount: 0,
-    entryFee: 0,
   };
 
   if (joined) {
@@ -136,9 +147,9 @@ export default function JoinGroupScreen() {
             TE UNISTE!
           </h2>
           <p className="text-text-secondary">
-            Ya sos parte de <strong>{group.name}</strong>
+            Ya sos parte de <strong>{groupInfo?.name}</strong>
           </p>
-          <p className="text-sm text-text-muted mt-2">Entrando al grupo...</p>
+          <p className="text-sm text-text-muted mt-2">Entrando al prode...</p>
         </motion.div>
       </div>
     );
@@ -148,7 +159,7 @@ export default function JoinGroupScreen() {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-bg-primary px-6">
         <Loader2 className="animate-spin text-primary" size={32} />
-        <p className="text-sm text-text-muted mt-4">Cargando grupo...</p>
+        <p className="text-sm text-text-muted mt-4">Cargando prode...</p>
       </div>
     );
   }
@@ -163,10 +174,10 @@ export default function JoinGroupScreen() {
         >
           <div className="text-5xl mb-4">😕</div>
           <h2 className="font-display text-lg font-bold tracking-wider mb-2">
-            {error || "No se encontro el grupo"}
+            {error || "No se encontró el prode"}
           </h2>
           <p className="text-sm text-text-muted mb-6">
-            Verifica el link de invitacion e intenta de nuevo
+            Verificá el link de invitación e intentá de nuevo
           </p>
           <button
             onClick={() => setScreen("main")}
@@ -179,6 +190,17 @@ export default function JoinGroupScreen() {
     );
   }
 
+  const atCapacity = groupInfo.memberCount >= groupInfo.participantLimit;
+  const isOrg = groupInfo.type === "ORGANIZATION";
+  const statusBlocked = groupInfo.status !== "ACTIVE";
+  const blockMsg =
+    statusBlocked && groupInfo.status !== "ACTIVE"
+      ? STATUS_BLOCK_MESSAGE[groupInfo.status as Exclude<ApiGroupStatus, "ACTIVE">]
+      : atCapacity
+        ? `Este prode alcanzó el límite de ${groupInfo.participantLimit} participantes.`
+        : null;
+  const canJoin = !statusBlocked && !atCapacity;
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-bg-primary px-6 mx-auto max-w-lg md:max-w-xl w-full">
       <motion.div
@@ -187,80 +209,135 @@ export default function JoinGroupScreen() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
       >
-        {/* Logo */}
-        <div className="text-center mb-8">
+        {/* Logo / brand */}
+        <div className="flex flex-col items-center gap-3 mb-8">
+          <CheckBallLogo size={56} />
           <h1 className="font-display text-base font-bold tracking-[0.2em] text-primary">
             ARMATUPRODE
           </h1>
         </div>
 
-        {/* Invite message */}
-        <p className="text-center text-text-secondary text-base mb-6">
-          Te invitaron a un grupo
+        <p className="text-center text-text-secondary text-base mb-2">
+          Te invitaron a un prode {isOrg ? "de empresa/comunidad" : "personal"}
+        </p>
+        <p className="text-center text-xs text-text-muted mb-6">
+          Jugar es gratis para invitados.
         </p>
 
         {/* Group card */}
-        <div className="rounded-2xl border border-primary/20 bg-bg-surface p-6 mb-6"
+        <div
+          className="rounded-2xl border border-primary/20 bg-bg-surface p-6 mb-6"
           style={{ boxShadow: "0 0 30px rgba(16,185,129,0.08)" }}
         >
+          {/* Organization branding */}
+          {groupInfo.organization && (
+            <div className="flex items-center gap-3 mb-4 pb-4 border-b border-border-default">
+              {groupInfo.organization.logoUrl && !logoFailed ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={groupInfo.organization.logoUrl}
+                  alt={groupInfo.organization.name}
+                  onError={() => setLogoFailed(true)}
+                  className="h-10 w-10 rounded-lg object-cover"
+                />
+              ) : (
+                <div className="h-10 w-10 rounded-lg bg-bg-primary border border-border-default flex items-center justify-center text-text-muted text-xs font-bold">
+                  {groupInfo.organization.name.slice(0, 2).toUpperCase()}
+                </div>
+              )}
+              <div>
+                <div className="text-xs text-text-muted">Organizado por</div>
+                <div className="text-sm font-semibold">{groupInfo.organization.name}</div>
+              </div>
+            </div>
+          )}
+
           <div className="text-center mb-4">
-            <span className="text-5xl">{group.emoji}</span>
+            <span className="text-5xl">{groupInfo.emoji}</span>
           </div>
-          <h2 className="text-center text-xl font-bold mb-1">{group.name}</h2>
-          <p className="text-center text-sm text-text-muted mb-5">{group.tournament}</p>
+          <h2 className="text-center text-xl font-bold mb-1">{groupInfo.name}</h2>
+          <p className="text-center text-sm text-text-muted mb-5">{groupInfo.tournament}</p>
 
           <div className="flex justify-center gap-6 mb-4">
             <div className="text-center">
               <div className="flex items-center justify-center gap-1 text-text-secondary">
                 <Users size={14} />
-                <span className="text-sm font-bold">{group.members}</span>
+                <span className="text-sm font-bold">
+                  {groupInfo.memberCount}/{groupInfo.participantLimit}
+                </span>
               </div>
-              <span className="text-[10px] text-text-muted">miembros</span>
+              <span className="text-[10px] text-text-muted">participantes</span>
             </div>
-            {group.hasPool && (
-              <div className="text-center">
-                <div className="flex items-center justify-center gap-1 text-accent">
-                  <Trophy size={14} />
-                  <span className="text-sm font-bold">${group.poolAmount.toLocaleString()}</span>
-                </div>
-                <span className="text-[10px] text-text-muted">pozo</span>
-              </div>
-            )}
           </div>
 
-          {group.createdBy && (
+          {groupInfo.createdBy && !groupInfo.organization && (
             <p className="text-center text-xs text-text-muted">
-              Creado por <strong className="text-text-secondary">{group.createdBy}</strong>
+              Creado por <strong className="text-text-secondary">{groupInfo.createdBy}</strong>
             </p>
           )}
 
-          {/* Entry fee notice */}
-          {group.hasPool && group.entryFee > 0 && (
-            <div className="mt-4 rounded-xl border border-accent/30 bg-accent/5 p-3 text-center">
-              <div className="text-[10px] font-display tracking-widest text-accent/70 mb-0.5">ENTRADA POR PERSONA</div>
-              <div className="font-display text-xl font-bold text-accent">${group.entryFee.toLocaleString()}</div>
+          {/* Manual prize */}
+          {groupInfo.prizeType !== "NONE" && groupInfo.prizeDescription && (
+            <div className="mt-4 rounded-xl border border-accent/30 bg-accent/5 p-3">
+              <div className="flex items-center gap-2 text-[10px] font-display tracking-widest text-accent/80 mb-1">
+                <Trophy size={10} /> PREMIO
+              </div>
+              <div className="text-sm text-text-primary">{groupInfo.prizeDescription}</div>
               <div className="text-[10px] text-text-muted mt-1">
-                Al unirte, deberas contribuir al pozo de premios
+                El organizador define y entrega el premio según las reglas del prode.
+              </div>
+            </div>
+          )}
+
+          {/* Rules */}
+          {groupInfo.rulesDescription && (
+            <div className="mt-3 rounded-xl border border-border-default bg-bg-primary p-3">
+              <div className="text-[10px] font-display tracking-widest text-text-muted mb-1">
+                REGLAS
+              </div>
+              <div className="text-xs text-text-secondary whitespace-pre-line">
+                {groupInfo.rulesDescription}
+              </div>
+            </div>
+          )}
+
+          {/* Legacy cash-pool entry — only when flag explicitly ON */}
+          {config.flags.enableRealMoneyPools && groupInfo.hasPool && groupInfo.entryFee > 0 && (
+            <div className="mt-4 rounded-xl border border-accent/30 bg-accent/5 p-3 text-center">
+              <div className="text-[10px] font-display tracking-widest text-accent/70 mb-0.5">
+                ENTRADA
+              </div>
+              <div className="font-display text-xl font-bold text-accent">
+                ${groupInfo.entryFee.toLocaleString()}
               </div>
             </div>
           )}
         </div>
 
+        {/* Status / capacity block message */}
+        {blockMsg && (
+          <div className="mb-4 rounded-xl border border-danger/30 bg-danger/5 p-3 flex items-start gap-2">
+            <AlertTriangle size={14} className="text-danger mt-0.5 shrink-0" />
+            <span className="text-xs text-text-primary">{blockMsg}</span>
+          </div>
+        )}
+
         {/* Join button */}
         <button
           onClick={handleJoin}
-          disabled={joining}
+          disabled={joining || !canJoin}
           className="w-full rounded-2xl bg-primary py-4 font-display text-sm font-bold tracking-widest text-bg-primary transition-all hover:bg-primary/90 active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-50"
-          style={{ boxShadow: "0 0 24px rgba(16,185,129,0.25)" }}
+          style={canJoin ? { boxShadow: "0 0 24px rgba(16,185,129,0.25)" } : undefined}
         >
           {joining ? (
-            <><Loader2 size={16} className="animate-spin" /> UNIENDOSE...</>
+            <><Loader2 size={16} className="animate-spin" /> UNIÉNDOSE...</>
+          ) : !canJoin ? (
+            <><Lock size={14} /> NO DISPONIBLE</>
           ) : (
-            <>UNIRME AL GRUPO <ArrowRight size={16} /></>
+            <>UNIRME GRATIS <ArrowRight size={16} /></>
           )}
         </button>
 
-        {/* Skip */}
         <button
           onClick={() => setScreen("main")}
           className="w-full mt-3 py-3 text-sm text-text-muted hover:text-text-secondary transition-colors"

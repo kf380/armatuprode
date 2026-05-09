@@ -51,50 +51,11 @@ export async function GET(
   });
 }
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { user } = await getAuthUser(request);
-
-  if (!user) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  }
-
-  const dbUser = await prisma.user.findUnique({
-    where: { authId: user.id },
-  });
-
-  if (!dbUser) {
-    return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
-  }
-
-  const { id } = await params;
-
-  const group = await prisma.group.findUnique({
-    where: { id },
-  });
-
-  if (!group || !group.hasPool) {
-    return NextResponse.json({ error: "Este grupo no tiene pozo" }, { status: 400 });
-  }
-
-  const contribution = await prisma.poolContribution.upsert({
-    where: {
-      userId_groupId: {
-        userId: dbUser.id,
-        groupId: id,
-      },
-    },
-    update: { paid: true, paidAt: new Date() },
-    create: {
-      userId: dbUser.id,
-      groupId: id,
-      amount: group.entryFee,
-      paid: true,
-      paidAt: new Date(),
-    },
-  });
-
-  return NextResponse.json({ contribution });
+// POST removed: pool entry must come exclusively from MP webhook on APPROVED PaymentOrder.
+// Use POST /api/payments/create with { type: "pool_entry", groupId } to start the flow.
+export async function POST() {
+  return NextResponse.json(
+    { error: "Endpoint deshabilitado. Pagá con MercadoPago desde /api/payments/create." },
+    { status: 410 },
+  );
 }

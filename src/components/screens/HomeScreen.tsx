@@ -6,7 +6,9 @@ import { ChevronRight, Plus, Zap, TrendingUp, Target, Bell, ShoppingBag, Radio, 
 import XPBar from "@/components/XPBar";
 import { useApp } from "@/lib/store";
 import { useMatches, useGroups, useUserStats, useLiveMatches, deriveLevel } from "@/lib/hooks";
-import { currentUser as mockUser, matches as mockMatches, groups as mockGroups } from "@/lib/mock-data";
+// Mock fallbacks removed: only `currentUser` is kept as a default-shape source while the
+// real user is loading. Matches/groups must come from the API — never show fakes in prod.
+import { currentUser as mockUser } from "@/lib/mock-data";
 
 const stagger = {
   hidden: {},
@@ -66,32 +68,25 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
     };
   }, [dbUser, stats]);
 
-  // Matches from API or mock
-  const matches = useMemo(() => {
-    if (apiMatches.length > 0) return apiMatches;
-    return mockMatches;
-  }, [apiMatches]);
+  // Matches and groups: API only. No mock fallback to avoid showing fake data.
+  const matches = apiMatches;
 
-  // Groups from API or mock
   const groups = useMemo(() => {
-    if (apiGroups.length > 0) {
-      return apiGroups.map((g) => ({
-        id: g.id,
-        name: g.name,
-        emoji: g.emoji,
-        tournament: g.tournament,
-        members: g.memberCount,
-        userPosition: 0,
-        userPoints: 0,
-        maxPoints: 100,
-        hasPool: g.hasPool,
-        poolAmount: 0,
-        currency: g.currency,
-        entryFee: g.entryFee,
-        poolDistribution: [50, 30, 20] as [number, number, number],
-      }));
-    }
-    return mockGroups;
+    return apiGroups.map((g) => ({
+      id: g.id,
+      name: g.name,
+      emoji: g.emoji,
+      tournament: g.tournament,
+      members: g.memberCount,
+      userPosition: 0,
+      userPoints: 0,
+      maxPoints: 100,
+      hasPool: g.hasPool,
+      poolAmount: 0,
+      currency: g.currency,
+      entryFee: g.entryFee,
+      poolDistribution: [50, 30, 20] as [number, number, number],
+    }));
   }, [apiGroups]);
 
   const nextMatch = matches.find((m) => m.status === "upcoming" && !m.userPrediction);

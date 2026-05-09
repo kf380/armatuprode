@@ -19,7 +19,7 @@ export default function TermsPage() {
         TERMINOS Y CONDICIONES
       </h1>
       <p className="text-xs text-text-muted mb-8">
-        Ultima actualizacion: 25 de febrero de 2026
+        Ultima actualizacion: 9 de mayo de 2026
       </p>
 
       <div className="space-y-6 text-sm text-text-secondary leading-relaxed">
@@ -40,16 +40,17 @@ export default function TermsPage() {
           </h2>
           <p>
             ArmatuProde es una plataforma de entretenimiento que permite a los
-            usuarios crear grupos, realizar predicciones sobre resultados de
-            partidos de futbol, competir en rankings y participar en pozos de
-            premios entre amigos.
+            usuarios crear prodes, realizar predicciones sobre resultados de
+            partidos de futbol, competir en rankings y compartir un premio
+            opcional definido por el organizador del grupo.
           </p>
           <p className="mt-2">
-            <strong>ArmatuProde NO es un sitio de apuestas.</strong> Los pozos de
-            grupo son acuerdos privados entre amigos dentro de un grupo cerrado.
-            La plataforma facilita la organizacion y el registro de
-            contribuciones, pero no actua como casa de apuestas ni intermediario
-            financiero.
+            <strong>ArmatuProde NO es un sitio de apuestas ni de juegos de azar.</strong>{" "}
+            En la modalidad actual, los jugadores invitados participan de
+            forma gratuita y la plataforma no procesa, custodia ni reparte
+            pozos de dinero entre miembros. Cualquier premio es definido y
+            entregado por el organizador del prode por fuera de la
+            plataforma.
           </p>
         </section>
 
@@ -103,31 +104,33 @@ export default function TermsPage() {
 
         <section>
           <h2 className="font-display text-base font-bold text-text-primary mb-2">
-            5. Pozos de grupo
+            5. Premios y planes del prode
           </h2>
           <ul className="list-disc pl-5 space-y-1">
             <li>
-              Los pozos de grupo son organizados por los administradores de cada
-              grupo y representan un acuerdo entre los miembros del grupo.
+              El organizador de cada prode puede contratar un plan pago
+              (Personal Plus / Comunidad / Empresa) o usar el plan gratuito.
+              El pago del plan lo realiza el organizador y se procesa a
+              traves de MercadoPago.
             </li>
             <li>
-              El monto de la entrada es definido por el administrador del grupo
-              al momento de su creacion.
+              Los jugadores invitados al prode no abonan ningun cargo a
+              ArmatuProde para participar.
             </li>
             <li>
-              Los pagos de entradas a pozos se procesan a traves de MercadoPago.
+              El premio del prode (si existe) es definido y entregado por el
+              organizador. ArmatuProde no procesa, custodia ni reparte ese
+              premio.
             </li>
             <li>
-              La distribucion del pozo (1ro, 2do, 3ro) se define al crear el
-              grupo y es visible para todos los miembros.
+              ArmatuProde no actua como intermediario financiero entre
+              organizador y jugadores. Cualquier acuerdo economico entre
+              miembros del grupo se realiza por fuera de la plataforma.
             </li>
             <li>
-              ArmatuProde no cobra comision sobre los pozos de grupo. La
-              plataforma solo facilita la organizacion.
-            </li>
-            <li>
-              La distribucion de premios es responsabilidad del administrador del
-              grupo. ArmatuProde no garantiza el pago de premios entre miembros.
+              Si en el futuro se habilitan modalidades adicionales que
+              involucren pagos entre miembros, seran comunicadas
+              previamente y requeriran tu aceptacion explicita.
             </li>
           </ul>
         </section>
@@ -211,7 +214,7 @@ export default function TermsPage() {
             </li>
             <li>
               No somos responsables por disputas entre miembros de un grupo
-              respecto a pozos o premios.
+              respecto a premios definidos por el organizador.
             </li>
             <li>
               Los resultados de partidos y puntuaciones se obtienen de fuentes

@@ -3,6 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/supabase-server";
 import { creditCoins } from "@/lib/wallet";
 import { WalletLotSource } from "@prisma/client";
+import { log } from "@/lib/log";
+import { rateLimit } from "@/lib/ratelimit";
+import { limits } from "@/lib/limits";
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,6 +15,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
 
+    const rl = await rateLimit("usersWrite", user.id);
+    if (!rl.ok) {
+      return NextResponse.json(
+        { error: "Demasiados intentos, esperá un momento" },
+        { status: 429 },
+      );
+    }
+
     const body = await request.json();
     const { name, avatar, country, countryName } = body;
 
@@ -19,47 +30,85 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Nombre invalido" }, { status: 400 });
     }
 
-    // Check if user already exists by authId or email
-    let dbUser = await prisma.user.findFirst({
-      where: { OR: [{ authId: user.id }, { email: user.email! }] },
-    });
+    // 1. Try to find by current authId (this user already has a record).
+    let dbUser = await prisma.user.findUnique({ where: { authId: user.id } });
 
     if (dbUser) {
-      // Update existing user (link to current auth if needed)
+      // Same auth identity: safe to update profile fields.
       dbUser = await prisma.user.update({
         where: { id: dbUser.id },
-        data: { authId: user.id, name, avatar, country, countryName },
+        data: { name, avatar, country, countryName },
       });
-    } else {
-      // Create new user
-      const referralCode = name.trim().toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 6)
-        + Math.random().toString(36).slice(2, 6);
+      return NextResponse.json({ user: dbUser }, { status: 200 });
+    }
 
-      dbUser = await prisma.user.create({
-        data: {
+    // 2. No record for this authId. Check if email is already taken by ANOTHER auth identity.
+    if (user.email) {
+      const existingByEmail = await prisma.user.findUnique({ where: { email: user.email } });
+      if (existingByEmail) {
+        // Different authId on the same email = takeover attempt or pre-existing unverified account.
+        // Refuse to relink. Surface a generic message to avoid leaking account existence.
+        log("warn", "user_signup_email_collision", {
           authId: user.id,
-          email: user.email!,
-          name,
-          avatar: avatar || "🎮",
-          country: country || "🇦🇷",
-          countryName: countryName || "Argentina",
-          referralCode,
-        },
-      });
+          email: user.email,
+          existingUserId: existingByEmail.id,
+        });
+        return NextResponse.json(
+          { error: "Ese email ya esta en uso. Iniciá sesión con la cuenta original o usá otro email." },
+          { status: 409 },
+        );
+      }
+    }
 
-      // Create wallet with initial 100 coins as a proper WalletLot
-      creditCoins({
-        userId: dbUser.id,
-        amount: 100,
-        source: WalletLotSource.ADMIN,
-        reason: "welcome_bonus",
-        idempotencyKey: `welcome_${dbUser.id}`,
-      }).catch(() => {});
+    // 3. Public-launch cap on total registered users.
+    const userCount = await prisma.user.count();
+    if (userCount >= limits.maxPublicUsers()) {
+      return NextResponse.json(
+        { error: "Estamos en beta cerrada. Pedí tu invitación a hello@armatuprode.com.ar." },
+        { status: 403 },
+      );
+    }
+
+    // Create new user.
+    const referralCode = name.trim().toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 6)
+      + Math.random().toString(36).slice(2, 6);
+
+    dbUser = await prisma.user.create({
+      data: {
+        authId: user.id,
+        email: user.email!,
+        name,
+        avatar: avatar || "🎮",
+        country: country || "🇦🇷",
+        countryName: countryName || "Argentina",
+        referralCode,
+      },
+    });
+
+    // Welcome bonus only if email verified — blocks farming with fake emails in prod.
+    // The Supabase user object exposes `email_confirmed_at` (ISO string) once
+    // confirmation completed. In dev we credit anyway so the local flow works.
+    const emailConfirmed = !!(user as { email_confirmed_at?: string | null }).email_confirmed_at;
+    const isProd = process.env.NODE_ENV === "production";
+    if (emailConfirmed || !isProd) {
+      try {
+        await creditCoins({
+          userId: dbUser.id,
+          amount: 100,
+          source: WalletLotSource.ADMIN,
+          reason: "welcome_bonus",
+          idempotencyKey: `welcome_${dbUser.id}`,
+        });
+      } catch (err) {
+        log("error", "welcome_bonus_failed", { userId: dbUser.id, err: String(err) });
+      }
+    } else {
+      log("info", "welcome_bonus_deferred_email_unverified", { userId: dbUser.id });
     }
 
     return NextResponse.json({ user: dbUser }, { status: 201 });
   } catch (err) {
-    console.error("POST /api/users error:", err);
+    log("error", "users_post_failed", { err: String(err) });
     return NextResponse.json({ error: "Error interno" }, { status: 500 });
   }
 }
@@ -72,27 +121,34 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
 
-    // Find by authId first, then fallback to email
+    // Find STRICTLY by authId. Do NOT fall back to email: that allowed
+    // a new auth identity to take over an existing account by signing up
+    // with the same (unverified) email.
     let dbUser = await prisma.user.findUnique({
       where: { authId: user.id },
     });
 
-    if (!dbUser && user.email) {
-      dbUser = await prisma.user.findUnique({
-        where: { email: user.email },
-      });
-
-      // Link to current auth session
-      if (dbUser) {
-        dbUser = await prisma.user.update({
-          where: { id: dbUser.id },
-          data: { authId: user.id },
-        });
-      }
-    }
-
     if (!dbUser) {
       return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
+    }
+
+    // Welcome bonus claim: if user has now confirmed their email, ensure the
+    // welcome bonus is credited. `idempotencyKey: welcome_<userId>` makes this
+    // safe to call on every GET — already-credited users hit the idempotency
+    // short-circuit and nothing changes.
+    const emailConfirmed = !!(user as { email_confirmed_at?: string | null }).email_confirmed_at;
+    if (emailConfirmed) {
+      try {
+        await creditCoins({
+          userId: dbUser.id,
+          amount: 100,
+          source: WalletLotSource.ADMIN,
+          reason: "welcome_bonus",
+          idempotencyKey: `welcome_${dbUser.id}`,
+        });
+      } catch (err) {
+        log("error", "welcome_bonus_claim_failed", { userId: dbUser.id, err: String(err) });
+      }
     }
 
     // Backfill referral code for users created before the feature existed

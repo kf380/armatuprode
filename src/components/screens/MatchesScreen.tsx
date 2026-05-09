@@ -1,13 +1,12 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, AlertTriangle, Minus, Plus, X, Sparkles, Loader2 } from "lucide-react";
 import { useApp } from "@/lib/store";
-import { useMatches, ScreenMatch } from "@/lib/hooks";
+import { useMatches } from "@/lib/hooks";
 import { getPredictionContent, getExactResultContent } from "@/lib/share";
 import ShareButton from "@/components/ShareButton";
-import { matches as mockMatches } from "@/lib/mock-data";
 
 const stagger = {
   hidden: {},
@@ -29,7 +28,7 @@ interface Prediction {
 
 export default function MatchesScreen() {
   const { authFetch } = useApp();
-  const { matches: apiMatches, tournamentName, loading, error } = useMatches();
+  const { matches, tournamentName, loading, error, refetch } = useMatches();
   const [filter, setFilter] = useState<DateFilter>("today");
   const [predictions, setPredictions] = useState<Record<string, Prediction>>({});
   const [editingMatch, setEditingMatch] = useState<string | null>(null);
@@ -39,19 +38,7 @@ export default function MatchesScreen() {
   const [savedAnimation, setSavedAnimation] = useState<string | null>(null);
   const [sharePrompt, setSharePrompt] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-
-  // Use API data, fallback to mock if error
-  const matches: ScreenMatch[] = useMemo(() => {
-    if (error || (apiMatches.length === 0 && !loading)) {
-      return mockMatches.map((m) => ({
-        ...m,
-        phase: "GROUP_STAGE",
-        qualifiedTeam: null,
-        userPrediction: m.userPrediction ? { ...m.userPrediction, predictedQualifier: null } : null,
-      }));
-    }
-    return apiMatches;
-  }, [apiMatches, loading, error]);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const upcomingMatches = matches.filter((m) => m.status === "upcoming");
   const finishedMatches = matches.filter((m) => m.status === "finished");
@@ -74,6 +61,7 @@ export default function MatchesScreen() {
     const match = matches.find((m) => m.id === editingMatch);
 
     setSaving(true);
+    setSaveError(null);
     try {
       const res = await authFetch("/api/predictions", {
         method: "POST",
@@ -87,13 +75,15 @@ export default function MatchesScreen() {
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        alert(data.error || "Error al guardar prediccion");
+        const data = await res.json().catch(() => ({}));
+        setSaveError(data.error || "No pudimos guardar la prediccion. Reintentá.");
         setSaving(false);
         return;
       }
     } catch {
-      // Offline fallback: save locally
+      setSaveError("Error de conexion. Revisá tu internet y reintentá.");
+      setSaving(false);
+      return;
     }
     setSaving(false);
 
@@ -119,6 +109,26 @@ export default function MatchesScreen() {
     return (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="animate-spin text-primary" size={32} />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
+        <AlertTriangle className="text-danger mb-3" size={32} />
+        <h2 className="font-display text-sm font-bold tracking-widest mb-2">
+          NO PUDIMOS CARGAR LOS PARTIDOS
+        </h2>
+        <p className="text-xs text-text-secondary mb-5">
+          Revisá tu conexión y reintentá.
+        </p>
+        <button
+          onClick={() => refetch()}
+          className="rounded-xl bg-primary px-6 py-3 font-display text-xs font-bold tracking-widest text-bg-primary"
+        >
+          REINTENTAR
+        </button>
       </div>
     );
   }
@@ -367,7 +377,10 @@ export default function MatchesScreen() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/70 backdrop-blur-sm"
-            onClick={() => setEditingMatch(null)}
+            onClick={() => {
+              setEditingMatch(null);
+              setSaveError(null);
+            }}
           >
             <motion.div
               initial={{ y: 300 }}
@@ -388,7 +401,10 @@ export default function MatchesScreen() {
                         <p className="text-xs text-text-muted">{match.group} • {match.time}hs</p>
                       </div>
                       <button
-                        onClick={() => setEditingMatch(null)}
+                        onClick={() => {
+                          setEditingMatch(null);
+                          setSaveError(null);
+                        }}
                         className="h-8 w-8 rounded-full border border-border-default flex items-center justify-center text-text-muted hover:text-text-primary"
                       >
                         <X size={16} />
@@ -494,6 +510,11 @@ export default function MatchesScreen() {
                       )}
                     </div>
 
+                    {saveError && (
+                      <div className="mb-3 rounded-xl border border-danger/40 bg-danger/10 px-4 py-3 text-xs text-danger">
+                        {saveError}
+                      </div>
+                    )}
                     <button
                       onClick={savePrediction}
                       disabled={saving}

@@ -143,10 +143,10 @@ export default function RulesScreen() {
           <motion.div variants={fadeUp} className="rounded-xl border border-border-default bg-bg-surface p-4">
             <h2 className="font-display text-sm font-bold tracking-wider mb-3">LIGAS / GRUPOS</h2>
             <ul className="space-y-1.5 text-xs text-text-secondary">
-              <li>Crea o unite a ligas con amigos</li>
-              <li>Ranking interno por liga</li>
-              <li>Opcional: pozo con entrada en pesos</li>
-              <li>Distribucion de premios configurable (ej: 50% / 30% / 20%)</li>
+              <li>Creá o unite a prodes con amigos, familia o tu comunidad</li>
+              <li>Los invitados juegan gratis</li>
+              <li>Ranking interno por prode</li>
+              <li>Premios opcionales definidos y entregados por el organizador</li>
             </ul>
           </motion.div>
         </motion.div>

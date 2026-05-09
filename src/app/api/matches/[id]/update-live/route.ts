@@ -1,19 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { rateLimit, hashSecret } from "@/lib/ratelimit";
+import { adminKeyFromRequest, isValidAdmin } from "@/lib/admin-auth";
+import { logAdminAction } from "@/lib/admin-audit";
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  // Auth: accept admin key in Authorization header or body (backwards compat)
-  const authHeader = request.headers.get("authorization");
-  const body = await request.json();
-  const adminKey = authHeader?.replace("Bearer ", "") || body.adminKey;
-  const { scoreA, scoreB, minute, period } = body;
-
-  if (!adminKey || adminKey !== process.env.ADMIN_API_KEY) {
+  const adminKey = adminKeyFromRequest(request);
+  if (!isValidAdmin(adminKey)) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const adminRl = await rateLimit("adminByKey", hashSecret(adminKey!));
+  if (!adminRl.ok) {
+    return NextResponse.json({ error: "Rate limited" }, { status: 429 });
+  }
+  const body = await request.json();
+  const { scoreA, scoreB, minute, period } = body;
 
   const { id } = await params;
 
@@ -36,6 +40,14 @@ export async function POST(
       ...(minute != null ? { minute } : {}),
       ...(period ? { period } : {}),
     },
+  });
+
+  await logAdminAction(request, "update_live", adminKey, {
+    matchId: id,
+    scoreA: scoreA ?? null,
+    scoreB: scoreB ?? null,
+    minute: minute ?? null,
+    period: period ?? null,
   });
 
   return NextResponse.json({ ok: true, matchId: id });

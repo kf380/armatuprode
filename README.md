@@ -1,36 +1,66 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ArmaTuProde
 
-## Getting Started
+Prode social mobile-first construido con Next.js 16 (App Router), Supabase, Prisma y MercadoPago.
 
-First, run the development server:
+## Desarrollo local
 
 ```bash
+npm install
+cp .env.example .env.local  # completar valores
+npx prisma generate
+npx prisma db push          # solo si cambia el schema
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Tests
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm test            # corre vitest una vez
+npm run test:watch  # modo watch
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Variables de entorno
 
-## Learn More
+### Obligatorias en producción
 
-To learn more about Next.js, take a look at the following resources:
+El handler `validateProductionEnv()` se ejecuta en webhooks y crons y rechaza el boot si falta alguna.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Variable | Para qué sirve |
+|---|---|
+| `DATABASE_URL` | Postgres Supabase pooler (PgBouncer 6543) |
+| `DIRECT_URL` | Postgres directo (5432) — solo para `prisma db push`/migrate |
+| `NEXT_PUBLIC_SUPABASE_URL` | Cliente Supabase |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Cliente Supabase (público) |
+| `MERCADOPAGO_ACCESS_TOKEN` | Token MP del merchant |
+| `MP_WEBHOOK_SECRET` | Secret de notificaciones MP — valida `x-signature`. **Sin esto, prod rechaza todos los webhooks.** |
+| `ADMIN_API_KEY` | Auth de endpoints admin (`/api/matches/[id]/finish`, `/api/tournaments`, etc.) |
+| `CRON_SECRET` | Auth de Vercel Cron Jobs |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Opcionales
 
-## Deploy on Vercel
+| Variable | Para qué sirve |
+|---|---|
+| `NEXT_PUBLIC_APP_URL` | URL canónica para `back_urls` de MP. Si falta, cae a `VERCEL_URL`. |
+| `UPSTASH_REDIS_REST_URL` | Rate limiting (Upstash) — sin esto, rate limiting es no-op |
+| `UPSTASH_REDIS_REST_TOKEN` | Rate limiting (Upstash) |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | Web push |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Cómo obtener `MP_WEBHOOK_SECRET`
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Panel de MercadoPago → Tus integraciones → Webhooks.
+2. Copiar la *Clave secreta* del endpoint de notificaciones.
+3. Configurar como `MP_WEBHOOK_SECRET` en Vercel (preview + production).
+
+### Configuración de Supabase Auth (producción)
+
+- Activar **Email confirmation** en *Authentication → Providers → Email*.
+- El welcome bonus de 100 coins solo se acredita a usuarios con `email_confirmed_at` no nulo. Esto bloquea el farming de cuentas falsas en prod.
+- En dev (`NODE_ENV !== "production"`) el bonus se acredita igual para no romper el flujo local.
+
+## Migraciones manuales
+
+El proyecto usa `prisma db push`, no `prisma migrate`. SQLs de cambios significativos viven en `prisma/migrations-manual/` con descripción en español. Aplicarlos directamente contra la BD o vía `prisma db push` después de actualizar `schema.prisma`.
+
+## Endpoints admin
+
+`/admin` es una pantalla server-rendered que requiere cookie `admin_session`. La cookie se obtiene posteando `ADMIN_API_KEY` a `POST /api/admin/auth`. Sin esa cookie, la UI no se renderiza.
