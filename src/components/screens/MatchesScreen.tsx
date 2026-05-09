@@ -2,12 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, AlertTriangle, Minus, Plus, X, Sparkles, Loader2, CalendarX } from "lucide-react";
+import { Check, AlertTriangle, Minus, Plus, X, Sparkles, Loader2, CalendarX, Search } from "lucide-react";
 import { useApp } from "@/lib/store";
-import { useMatches } from "@/lib/hooks";
+import { useMatches, type ScreenMatch } from "@/lib/hooks";
 import { getPredictionContent, getExactResultContent } from "@/lib/share";
 import ShareButton from "@/components/ShareButton";
-import { classifyMatchDay, formatMatchDayLabel } from "@/lib/format-date";
+import { calendarDayInTz, classifyMatchDay, formatMatchDayLabel } from "@/lib/format-date";
 
 const stagger = {
   hidden: {},
@@ -29,6 +29,41 @@ const FILTER_LABEL: Record<DateFilter, string> = {
 
 const FILTERS: DateFilter[] = ["today", "tomorrow", "week", "all"];
 
+type PhaseFilter = "ALL" | "GROUP_STAGE" | "ROUND_OF_32" | "ROUND_OF_16" | "QUARTER_FINALS" | "SEMI_FINALS" | "THIRD_PLACE" | "FINAL";
+
+const PHASE_LABEL: Record<Exclude<PhaseFilter, "ALL">, string> = {
+  GROUP_STAGE: "GRUPOS",
+  ROUND_OF_32: "32VOS",
+  ROUND_OF_16: "OCTAVOS",
+  QUARTER_FINALS: "CUARTOS",
+  SEMI_FINALS: "SEMIS",
+  THIRD_PLACE: "3ER PUESTO",
+  FINAL: "FINAL",
+};
+
+// Order phases canonically (group stage first, final last) for display.
+const PHASE_ORDER: Array<Exclude<PhaseFilter, "ALL">> = [
+  "GROUP_STAGE",
+  "ROUND_OF_32",
+  "ROUND_OF_16",
+  "QUARTER_FINALS",
+  "SEMI_FINALS",
+  "THIRD_PLACE",
+  "FINAL",
+];
+
+function matchSearchHit(m: ScreenMatch, query: string): boolean {
+  if (!query) return true;
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return (
+    m.teamA.code.toLowerCase().includes(q) ||
+    m.teamA.name.toLowerCase().includes(q) ||
+    m.teamB.code.toLowerCase().includes(q) ||
+    m.teamB.name.toLowerCase().includes(q)
+  );
+}
+
 interface Prediction {
   matchId: string;
   scoreA: number;
@@ -40,6 +75,8 @@ export default function MatchesScreen() {
   const { authFetch } = useApp();
   const { matches, tournamentName, loading, error, refetch } = useMatches();
   const [filter, setFilter] = useState<DateFilter>("today");
+  const [phaseFilter, setPhaseFilter] = useState<PhaseFilter>("ALL");
+  const [search, setSearch] = useState("");
   const [predictions, setPredictions] = useState<Record<string, Prediction>>({});
   const [editingMatch, setEditingMatch] = useState<string | null>(null);
   const [tempScoreA, setTempScoreA] = useState(0);
@@ -69,8 +106,16 @@ export default function MatchesScreen() {
     return counts;
   }, [allUpcoming]);
 
-  // Apply the filter. "week" includes today + tomorrow + thisWeek.
-  const upcomingMatches = useMemo(() => {
+  // Phases actually represented in the upcoming pool (so we don't show
+  // empty pills for stages that aren't unlocked yet).
+  const availablePhases = useMemo(() => {
+    const set = new Set<string>();
+    for (const m of allUpcoming) set.add(m.phase);
+    return PHASE_ORDER.filter((p) => set.has(p));
+  }, [allUpcoming]);
+
+  // Apply the date filter. "week" includes today + tomorrow + thisWeek.
+  const dateFiltered = useMemo(() => {
     if (filter === "all") return allUpcoming;
     return allUpcoming.filter((m) => {
       const b = classifyMatchDay(m.matchDateIso);
@@ -80,6 +125,33 @@ export default function MatchesScreen() {
       return false;
     });
   }, [allUpcoming, filter]);
+
+  // Then apply phase filter (chained).
+  const phaseFiltered = useMemo(() => {
+    if (phaseFilter === "ALL") return dateFiltered;
+    return dateFiltered.filter((m) => m.phase === phaseFilter);
+  }, [dateFiltered, phaseFilter]);
+
+  // Then search (chained).
+  const upcomingMatches = useMemo(() => {
+    return phaseFiltered.filter((m) => matchSearchHit(m, search));
+  }, [phaseFiltered, search]);
+
+  // Group by calendar day in browser timezone — rendered as section headers
+  // when the active filter spans multiple days. For "today"/"tomorrow" we
+  // skip headers (single day, redundant).
+  const groupedByDay = useMemo(() => {
+    if (filter === "today" || filter === "tomorrow") return null;
+    const groups = new Map<string, ScreenMatch[]>();
+    for (const m of upcomingMatches) {
+      const day = calendarDayInTz(m.matchDateIso);
+      const arr = groups.get(day) ?? [];
+      arr.push(m);
+      groups.set(day, arr);
+    }
+    // Sort days ascending (chronological).
+    return Array.from(groups.entries()).sort(([a], [b]) => a.localeCompare(b));
+  }, [upcomingMatches, filter]);
 
   const totalUpcoming = upcomingMatches.length;
   const predicted = upcomingMatches.filter(
@@ -180,7 +252,7 @@ export default function MatchesScreen() {
         <p className="mt-0.5 text-base text-text-secondary">{tournamentName}</p>
       </motion.div>
 
-      {/* Filter pills */}
+      {/* Date filter pills (row 1) */}
       <motion.div variants={fadeUp} className="flex gap-2 overflow-x-auto -mx-1 px-1 pb-1">
         {FILTERS.map((f) => {
           const count =
@@ -216,6 +288,56 @@ export default function MatchesScreen() {
         })}
       </motion.div>
 
+      {/* Phase filter chips (row 2) — only when more than one phase exists */}
+      {availablePhases.length > 1 && (
+        <motion.div variants={fadeUp} className="flex gap-2 overflow-x-auto -mx-1 px-1 pb-1">
+          <button
+            onClick={() => setPhaseFilter("ALL")}
+            className={`shrink-0 rounded-full px-3 py-1 font-display text-[10px] font-bold tracking-wider transition-all ${
+              phaseFilter === "ALL"
+                ? "bg-text-primary text-bg-primary"
+                : "border border-border-default text-text-muted"
+            }`}
+          >
+            FASES: TODAS
+          </button>
+          {availablePhases.map((p) => (
+            <button
+              key={p}
+              onClick={() => setPhaseFilter(p)}
+              className={`shrink-0 rounded-full px-3 py-1 font-display text-[10px] font-bold tracking-wider transition-all ${
+                phaseFilter === p
+                  ? "bg-text-primary text-bg-primary"
+                  : "border border-border-default text-text-muted hover:text-text-secondary"
+              }`}
+            >
+              {PHASE_LABEL[p]}
+            </button>
+          ))}
+        </motion.div>
+      )}
+
+      {/* Search */}
+      <motion.div variants={fadeUp} className="relative">
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar equipo..."
+          className="w-full rounded-xl border border-border-default bg-bg-surface pl-9 pr-9 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-primary/50 focus:outline-none transition-colors"
+        />
+        {search && (
+          <button
+            onClick={() => setSearch("")}
+            className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6 rounded-full flex items-center justify-center text-text-muted hover:text-text-primary"
+            aria-label="Limpiar búsqueda"
+          >
+            <X size={12} />
+          </button>
+        )}
+      </motion.div>
+
       {/* Progress bar */}
       <motion.div variants={fadeUp} className="rounded-xl border border-border-default bg-bg-surface p-3">
         <div className="flex items-center justify-between mb-1.5">
@@ -249,31 +371,58 @@ export default function MatchesScreen() {
           <div className="rounded-xl border border-border-default bg-bg-surface p-8 text-center">
             <CalendarX className="mx-auto text-text-muted mb-2" size={28} />
             <div className="text-sm text-text-primary mb-1">
-              {filter === "today"
-                ? "No hay partidos hoy"
-                : filter === "tomorrow"
-                  ? "No hay partidos mañana"
-                  : filter === "week"
-                    ? "No hay partidos esta semana"
-                    : "No hay próximos partidos"}
+              {search
+                ? `Sin resultados para "${search}"`
+                : phaseFilter !== "ALL" && dateFiltered.length === 0
+                  ? `No hay partidos en ${PHASE_LABEL[phaseFilter as Exclude<PhaseFilter, "ALL">]}`
+                  : filter === "today"
+                    ? "No hay partidos hoy"
+                    : filter === "tomorrow"
+                      ? "No hay partidos mañana"
+                      : filter === "week"
+                        ? "No hay partidos esta semana"
+                        : "No hay próximos partidos"}
             </div>
             <p className="text-xs text-text-muted mb-4">
-              {filter !== "all" && allUpcoming.length > 0
-                ? `Hay ${allUpcoming.length} partido${allUpcoming.length === 1 ? "" : "s"} más adelante.`
-                : "El torneo no tiene partidos cargados todavía."}
+              {search
+                ? "Probá con otro nombre o código."
+                : phaseFilter !== "ALL" && dateFiltered.length > 0
+                  ? "Hay partidos en otras fases."
+                  : filter !== "all" && allUpcoming.length > 0
+                    ? `Hay ${allUpcoming.length} partido${allUpcoming.length === 1 ? "" : "s"} más adelante.`
+                    : "El torneo no tiene partidos cargados todavía."}
             </p>
-            {filter !== "all" && allUpcoming.length > 0 && (
-              <button
-                onClick={() => setFilter("all")}
-                className="rounded-xl border border-border-default bg-bg-primary px-4 py-2 text-xs font-display font-bold tracking-wider text-text-primary hover:border-primary/40"
-              >
-                VER TODOS
-              </button>
-            )}
+            <div className="flex flex-wrap gap-2 justify-center">
+              {search && (
+                <button
+                  onClick={() => setSearch("")}
+                  className="rounded-xl border border-border-default bg-bg-primary px-4 py-2 text-xs font-display font-bold tracking-wider text-text-primary hover:border-primary/40"
+                >
+                  LIMPIAR BÚSQUEDA
+                </button>
+              )}
+              {!search && phaseFilter !== "ALL" && (
+                <button
+                  onClick={() => setPhaseFilter("ALL")}
+                  className="rounded-xl border border-border-default bg-bg-primary px-4 py-2 text-xs font-display font-bold tracking-wider text-text-primary hover:border-primary/40"
+                >
+                  TODAS LAS FASES
+                </button>
+              )}
+              {!search && filter !== "all" && allUpcoming.length > 0 && (
+                <button
+                  onClick={() => setFilter("all")}
+                  className="rounded-xl border border-border-default bg-bg-primary px-4 py-2 text-xs font-display font-bold tracking-wider text-text-primary hover:border-primary/40"
+                >
+                  VER TODOS
+                </button>
+              )}
+            </div>
           </div>
         )}
-        <div className="space-y-2.5 md:grid md:grid-cols-2 md:gap-4 md:space-y-0">
-          {upcomingMatches.map((match) => {
+        {/* Render: grouped by day when filter spans multiple days, flat list otherwise. */}
+        {(() => {
+          const renderCard = (match: ScreenMatch) => {
             const hasPred = match.userPrediction || predictions[match.id];
             const pred = predictions[match.id] || match.userPrediction;
             const justSaved = savedAnimation === match.id;
@@ -385,8 +534,38 @@ export default function MatchesScreen() {
                 )}
               </motion.div>
             );
-          })}
-        </div>
+          };
+
+          if (groupedByDay && upcomingMatches.length > 0) {
+            return (
+              <div className="space-y-5">
+                {groupedByDay.map(([day, items]) => (
+                  <div key={day}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <h3 className="font-display text-[10px] font-bold tracking-widest text-text-muted uppercase">
+                        {formatMatchDayLabel(items[0].matchDateIso)}
+                      </h3>
+                      <span className="text-[10px] text-text-muted">·</span>
+                      <span className="text-[10px] text-text-muted">
+                        {items.length} partido{items.length === 1 ? "" : "s"}
+                      </span>
+                      <div className="flex-1 h-px bg-border-default ml-2" />
+                    </div>
+                    <div className="space-y-2.5 md:grid md:grid-cols-2 md:gap-4 md:space-y-0">
+                      {items.map(renderCard)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          }
+
+          return (
+            <div className="space-y-2.5 md:grid md:grid-cols-2 md:gap-4 md:space-y-0">
+              {upcomingMatches.map(renderCard)}
+            </div>
+          );
+        })()}
       </motion.div>
 
       {/* Finished Matches */}
