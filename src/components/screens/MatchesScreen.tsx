@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, AlertTriangle, Minus, Plus, X, Sparkles, Loader2 } from "lucide-react";
+import { Check, AlertTriangle, Minus, Plus, X, Sparkles, Loader2, CalendarX } from "lucide-react";
 import { useApp } from "@/lib/store";
 import { useMatches } from "@/lib/hooks";
 import { getPredictionContent, getExactResultContent } from "@/lib/share";
 import ShareButton from "@/components/ShareButton";
+import { classifyMatchDay, formatMatchDayLabel } from "@/lib/format-date";
 
 const stagger = {
   hidden: {},
@@ -17,7 +18,16 @@ const fadeUp = {
   show: { opacity: 1, y: 0, transition: { duration: 0.35 } },
 } as const;
 
-type DateFilter = "today" | "tomorrow" | "week";
+type DateFilter = "today" | "tomorrow" | "week" | "all";
+
+const FILTER_LABEL: Record<DateFilter, string> = {
+  today: "HOY",
+  tomorrow: "MAÑANA",
+  week: "SEMANA",
+  all: "TODOS",
+};
+
+const FILTERS: DateFilter[] = ["today", "tomorrow", "week", "all"];
 
 interface Prediction {
   matchId: string;
@@ -40,12 +50,41 @@ export default function MatchesScreen() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const upcomingMatches = matches.filter((m) => m.status === "upcoming");
+  const allUpcoming = useMemo(
+    () => matches.filter((m) => m.status === "upcoming"),
+    [matches],
+  );
   const finishedMatches = matches.filter((m) => m.status === "finished");
 
+  // Bucket counts (for showing how many in each tab + auto-pick fallback).
+  const bucketCounts = useMemo(() => {
+    const counts = { today: 0, tomorrow: 0, thisWeek: 0, later: 0 };
+    for (const m of allUpcoming) {
+      const b = classifyMatchDay(m.matchDateIso);
+      if (b === "today") counts.today++;
+      else if (b === "tomorrow") counts.tomorrow++;
+      else if (b === "thisWeek") counts.thisWeek++;
+      else if (b === "later") counts.later++;
+    }
+    return counts;
+  }, [allUpcoming]);
+
+  // Apply the filter. "week" includes today + tomorrow + thisWeek.
+  const upcomingMatches = useMemo(() => {
+    if (filter === "all") return allUpcoming;
+    return allUpcoming.filter((m) => {
+      const b = classifyMatchDay(m.matchDateIso);
+      if (filter === "today") return b === "today";
+      if (filter === "tomorrow") return b === "tomorrow";
+      if (filter === "week") return b === "today" || b === "tomorrow" || b === "thisWeek";
+      return false;
+    });
+  }, [allUpcoming, filter]);
+
   const totalUpcoming = upcomingMatches.length;
-  const predicted =
-    upcomingMatches.filter((m) => m.userPrediction || predictions[m.id]).length;
+  const predicted = upcomingMatches.filter(
+    (m) => m.userPrediction || predictions[m.id],
+  ).length;
 
   const openPredict = (matchId: string) => {
     const existing = predictions[matchId];
@@ -142,20 +181,39 @@ export default function MatchesScreen() {
       </motion.div>
 
       {/* Filter pills */}
-      <motion.div variants={fadeUp} className="flex gap-2.5">
-        {(["today", "tomorrow", "week"] as const).map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`rounded-full px-5 py-2 font-display text-xs font-bold tracking-widest transition-all ${
-              filter === f
-                ? "bg-primary text-bg-primary shadow-[0_0_14px_rgba(16,185,129,0.25)]"
-                : "border border-border-default text-text-muted hover:text-text-secondary hover:border-text-muted/30"
-            }`}
-          >
-            {f === "today" ? "HOY" : f === "tomorrow" ? "MAÑANA" : "SEMANA"}
-          </button>
-        ))}
+      <motion.div variants={fadeUp} className="flex gap-2 overflow-x-auto -mx-1 px-1 pb-1">
+        {FILTERS.map((f) => {
+          const count =
+            f === "today"
+              ? bucketCounts.today
+              : f === "tomorrow"
+                ? bucketCounts.tomorrow
+                : f === "week"
+                  ? bucketCounts.today + bucketCounts.tomorrow + bucketCounts.thisWeek
+                  : allUpcoming.length;
+          return (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`shrink-0 rounded-full px-4 py-2 font-display text-xs font-bold tracking-widest transition-all flex items-center gap-2 ${
+                filter === f
+                  ? "bg-primary text-bg-primary shadow-[0_0_14px_rgba(16,185,129,0.25)]"
+                  : "border border-border-default text-text-muted hover:text-text-secondary hover:border-text-muted/30"
+              }`}
+            >
+              {FILTER_LABEL[f]}
+              <span
+                className={`text-[10px] font-bold rounded-full px-1.5 py-0 ${
+                  filter === f
+                    ? "bg-bg-primary/20 text-bg-primary"
+                    : "bg-bg-primary text-text-muted"
+                }`}
+              >
+                {count}
+              </span>
+            </button>
+          );
+        })}
       </motion.div>
 
       {/* Progress bar */}
@@ -187,6 +245,33 @@ export default function MatchesScreen() {
         <h2 className="font-display text-xs font-bold tracking-widest text-text-muted mb-3">
           PROXIMOS PARTIDOS
         </h2>
+        {upcomingMatches.length === 0 && (
+          <div className="rounded-xl border border-border-default bg-bg-surface p-8 text-center">
+            <CalendarX className="mx-auto text-text-muted mb-2" size={28} />
+            <div className="text-sm text-text-primary mb-1">
+              {filter === "today"
+                ? "No hay partidos hoy"
+                : filter === "tomorrow"
+                  ? "No hay partidos mañana"
+                  : filter === "week"
+                    ? "No hay partidos esta semana"
+                    : "No hay próximos partidos"}
+            </div>
+            <p className="text-xs text-text-muted mb-4">
+              {filter !== "all" && allUpcoming.length > 0
+                ? `Hay ${allUpcoming.length} partido${allUpcoming.length === 1 ? "" : "s"} más adelante.`
+                : "El torneo no tiene partidos cargados todavía."}
+            </p>
+            {filter !== "all" && allUpcoming.length > 0 && (
+              <button
+                onClick={() => setFilter("all")}
+                className="rounded-xl border border-border-default bg-bg-primary px-4 py-2 text-xs font-display font-bold tracking-wider text-text-primary hover:border-primary/40"
+              >
+                VER TODOS
+              </button>
+            )}
+          </div>
+        )}
         <div className="space-y-2.5 md:grid md:grid-cols-2 md:gap-4 md:space-y-0">
           {upcomingMatches.map((match) => {
             const hasPred = match.userPrediction || predictions[match.id];
@@ -225,7 +310,7 @@ export default function MatchesScreen() {
 
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-[10px] font-display tracking-widest text-text-muted">
-                    {match.group} • {match.time}hs
+                    {match.group} • {formatMatchDayLabel(match.matchDateIso)} • {match.time}hs
                   </span>
                   {hasPred ? (
                     <span className="flex items-center gap-1 text-[10px] text-primary font-bold">
@@ -398,7 +483,9 @@ export default function MatchesScreen() {
                     <div className="flex items-center justify-between mb-6">
                       <div>
                         <h3 className="font-display text-sm font-bold tracking-wider">PREDICCION</h3>
-                        <p className="text-xs text-text-muted">{match.group} • {match.time}hs</p>
+                        <p className="text-xs text-text-muted">
+                          {match.group} • {formatMatchDayLabel(match.matchDateIso)} • {match.time}hs
+                        </p>
                       </div>
                       <button
                         onClick={() => {

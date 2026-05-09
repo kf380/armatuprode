@@ -58,7 +58,10 @@ export interface ScreenMatch {
   officialMatchNumber: number | null;
   teamA: { code: string; name: string; flag: string };
   teamB: { code: string; name: string; flag: string };
+  /** YYYY-MM-DD in UTC. Legacy — prefer matchDateIso for filtering. */
   date: string;
+  /** Original ISO from API; use this to classify by browser-local day. */
+  matchDateIso: string;
   time: string;
   group: string;
   phase: string;
@@ -189,6 +192,7 @@ function apiToScreenMatch(m: ApiMatch): ScreenMatch {
     teamA: { code: m.teamACode, name: m.teamAName, flag: m.teamAFlag },
     teamB: { code: m.teamBCode, name: m.teamBName, flag: m.teamBFlag },
     date,
+    matchDateIso: m.matchDate,
     time,
     group: m.matchGroup || m.phase,
     phase: m.phase,
