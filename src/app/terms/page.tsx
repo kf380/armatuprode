@@ -19,7 +19,7 @@ export default function TermsPage() {
         TERMINOS Y CONDICIONES
       </h1>
       <p className="text-xs text-text-muted mb-8">
-        Ultima actualizacion: 9 de mayo de 2026
+        Ultima actualizacion: 10 de mayo de 2026
       </p>
 
       <div className="space-y-6 text-sm text-text-secondary leading-relaxed">
@@ -126,6 +126,24 @@ export default function TermsPage() {
               ArmatuProde no actua como intermediario financiero entre
               organizador y jugadores. Cualquier acuerdo economico entre
               miembros del grupo se realiza por fuera de la plataforma.
+            </li>
+            <li>
+              <strong>Modalidad &quot;Pozo declarado&quot; (opcional, gestionada por el organizador):</strong>{" "}
+              algunos prodes pueden declarar un pozo informativo entre sus
+              miembros. ArmaTuProde muestra el monto y registra qué jugadores
+              fueron marcados como pagos por el organizador, pero <strong>no
+              procesa, custodia ni reparte ese dinero</strong>. La cobranza y
+              entrega del premio son responsabilidad exclusiva del
+              organizador. ArmaTuProde cobra al organizador una fee de
+              servicio basada en el pozo declarado.
+            </li>
+            <li>
+              <strong>Suscripcion Premium para jugadores (opcional):</strong>{" "}
+              cada jugador puede activar Premium por torneo para acceder a
+              funcionalidades adicionales (insights, estadisticas, comodines).
+              Es un servicio de software pago directamente por el jugador a
+              ArmaTuProde. <strong>No es apuesta ni juego de azar</strong>; el
+              precio no depende ni se devuelve segun el resultado deportivo.
             </li>
             <li>
               Si en el futuro se habilitan modalidades adicionales que

@@ -40,6 +40,7 @@ type Decision =
   | { kind: "refunded_pool"; orderId: string }
   | { kind: "approved_group_activation"; orderId: string }
   | { kind: "reversed_group_activation"; orderId: string }
+  | { kind: "approved_player_premium"; orderId: string }
   | {
       kind: "to_credit_coins";
       orderId: string;
@@ -304,6 +305,59 @@ export async function POST(request: NextRequest) {
             data: { status: "APPROVED", externalId: mpPayment.id },
           });
           return { kind: "approved_group_activation", orderId: order.id };
+        }
+
+        if (order.type === "PLAYER_PREMIUM") {
+          // Phase 2c: B2C paywall. Create membership valid until tournament end.
+          const meta = order.metadata as { tournamentId?: string; amountUsd?: number } | null;
+          if (!meta?.tournamentId) {
+            await tx.paymentOrder.update({
+              where: { id: order.id },
+              data: { status: "REJECTED", externalId: mpPayment.id },
+            });
+            log("error", "player_premium_metadata_invalid", {
+              paymentId: mpPayment.id,
+              orderId: order.id,
+            });
+            return { kind: "rejected", orderId: order.id };
+          }
+          const tournament = await tx.tournament.findUnique({
+            where: { id: meta.tournamentId },
+            select: { id: true, endDate: true },
+          });
+          if (!tournament) {
+            await tx.paymentOrder.update({
+              where: { id: order.id },
+              data: { status: "REJECTED", externalId: mpPayment.id },
+            });
+            log("error", "player_premium_tournament_missing", {
+              orderId: order.id,
+              tournamentId: meta.tournamentId,
+            });
+            return { kind: "rejected", orderId: order.id };
+          }
+          await tx.premiumMembership.upsert({
+            where: { userId_tournamentId: { userId: order.userId, tournamentId: tournament.id } },
+            create: {
+              userId: order.userId,
+              tournamentId: tournament.id,
+              amountUsd: meta.amountUsd ?? 0,
+              validUntil: tournament.endDate,
+              paymentOrderId: order.id,
+              source: "mp",
+            },
+            update: {
+              validUntil: tournament.endDate,
+              amountUsd: meta.amountUsd ?? 0,
+              paymentOrderId: order.id,
+              paidAt: new Date(),
+            },
+          });
+          await tx.paymentOrder.update({
+            where: { id: order.id },
+            data: { status: "APPROVED", externalId: mpPayment.id },
+          });
+          return { kind: "approved_player_premium", orderId: order.id };
         }
 
         // COIN_PACK: defer status update to phase 2

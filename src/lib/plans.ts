@@ -237,6 +237,34 @@ function getFeeCapUsd(): number {
   return Number.isFinite(n) && n > 0 ? n : FEE_CAP_DEFAULT;
 }
 
+// ---------------------------------------------------------------------------
+// Phase 2c — Player Premium pricing (Versión C)
+// ---------------------------------------------------------------------------
+
+/** USD price for a player premium membership. Override via env. Default 2. */
+export function getPlayerPremiumPriceUsd(): number {
+  const v = process.env.PLAYER_PREMIUM_PRICE_USD;
+  if (!v) return 2;
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : 2;
+}
+
+export interface PlayerPremiumQuote {
+  amountUsd: number;
+  amountArs: number;
+  arsRate: number;
+}
+
+export function priceForPlayerPremium(): PlayerPremiumQuote {
+  const arsRate = getArsRate();
+  const amountUsd = getPlayerPremiumPriceUsd();
+  return {
+    amountUsd,
+    amountArs: Math.round(amountUsd * arsRate),
+    arsRate,
+  };
+}
+
 export function priceForPool(declaredPoolArs: number): ManualPoolFeeQuote {
   const arsRate = getArsRate();
   const feeBaseUsd = getFeeBaseUsd();

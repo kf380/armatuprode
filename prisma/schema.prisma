@@ -41,6 +41,7 @@ model User {
   chatMessages       ChatMessage[]
   chatMutes          ChatMute[]
   paymentOrders      PaymentOrder[]
+  premiumMemberships PremiumMembership[]
 }
 
 model Tournament {
@@ -56,9 +57,10 @@ model Tournament {
   active        Boolean         @default(true)
   createdAt     DateTime        @default(now())
 
-  matches Match[]
-  groups  Group[]
-  teams   Team[]
+  matches            Match[]
+  groups             Group[]
+  teams              Team[]
+  premiumMemberships PremiumMembership[]
 }
 
 enum TournamentType {
@@ -329,6 +331,27 @@ model PoolContribution {
 /// movement — the organizer collects entry fees by their own means
 /// (transfer/cash/MP-of-organizer) and uses this table as a shared dashboard.
 /// ArmaTuProde never custodies the pool money.
+/// PremiumMembership = jugador que pagó por features extra dentro de un torneo.
+/// Modelo B2C "Spotify-like": el jugador desbloquea premium voluntariamente.
+/// NO es apuesta. NO depende del resultado deportivo. Es paywall de software.
+model PremiumMembership {
+  id              String    @id @default(uuid())
+  userId          String
+  tournamentId    String
+  paidAt          DateTime  @default(now())
+  validUntil      DateTime
+  amountUsd       Int
+  paymentOrderId  String?
+  source          String    @default("mp")
+
+  user       User       @relation(fields: [userId], references: [id])
+  tournament Tournament @relation(fields: [tournamentId], references: [id])
+
+  @@unique([userId, tournamentId])
+  @@index([userId])
+  @@index([validUntil])
+}
+
 model PoolPaymentTracking {
   id          String    @id @default(uuid())
   groupId     String
@@ -565,6 +588,7 @@ enum PaymentType {
   COIN_PACK
   POOL_ENTRY
   GROUP_ACTIVATION
+  PLAYER_PREMIUM
 }
 
 model PaymentOrder {

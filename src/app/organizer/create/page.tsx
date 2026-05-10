@@ -21,7 +21,7 @@ const PERSONAL_PLAN_OPTIONS: Array<{
   priceLabel: string;
 }> = [
   { value: "FREE", label: "Gratis", description: "Hasta 10 jugadores", maxPlayers: 10, priceLabel: "$0" },
-  { value: "PERSONAL_PLUS", label: "Personal Plus", description: "Hasta 50 jugadores + premio", maxPlayers: 50, priceLabel: "USD 5" },
+  { value: "PERSONAL_PLUS", label: "Personal Plus", description: "Hasta 50 jugadores + premio", maxPlayers: 50, priceLabel: "USD 12" },
 ];
 
 const ORG_PLAN_OPTIONS: Array<{
@@ -31,9 +31,27 @@ const ORG_PLAN_OPTIONS: Array<{
   maxPlayers: number;
   priceLabel: string;
 }> = [
-  { value: "COMMUNITY", label: "Comunidad", description: "Hasta 100 jugadores · USD 1/jugador (mín USD 20)", maxPlayers: 100, priceLabel: "desde USD 20" },
-  { value: "BUSINESS", label: "Empresa", description: "Hasta 1000 jugadores · USD 1/jugador (mín USD 100)", maxPlayers: 1000, priceLabel: "desde USD 100" },
+  { value: "COMMUNITY", label: "Comunidad", description: "Hasta 100 jugadores · USD 3/jugador (mín USD 60)", maxPlayers: 100, priceLabel: "desde USD 60" },
+  { value: "BUSINESS", label: "Empresa", description: "Hasta 1000 jugadores · USD 5/jugador (mín USD 300)", maxPlayers: 1000, priceLabel: "desde USD 300" },
 ];
+
+const FEE_BASE_USD = 5;
+const FEE_PCT = 0.07;
+const FEE_CAP_USD = 400;
+const ARS_RATE = 1200;
+
+function calculatePoolFee(declaredPoolArs: number) {
+  const poolUsd = declaredPoolArs / ARS_RATE;
+  const variable = poolUsd * FEE_PCT;
+  const raw = FEE_BASE_USD + variable;
+  const cappedAt = raw > FEE_CAP_USD;
+  const usd = Math.min(Math.max(raw, FEE_BASE_USD), FEE_CAP_USD);
+  return {
+    usd: Math.round(usd * 100) / 100,
+    ars: Math.round(usd * ARS_RATE),
+    cappedAt,
+  };
+}
 
 const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])?$/;
 
@@ -60,9 +78,14 @@ export default function OrganizerCreatePage() {
   const [rulesDescription, setRulesDescription] = useState("");
   const [publicJoinEnabled, setPublicJoinEnabled] = useState(false);
   const [estimatedPlayers, setEstimatedPlayers] = useState(20);
+  // Phase 2: Manual Pool (only enabled when feature flag is on)
+  const [hasDeclaredPool, setHasDeclaredPool] = useState<boolean | null>(null);
+  const [declaredPoolEntry, setDeclaredPoolEntry] = useState<number>(1000);
   // Submit
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const manualPoolsEnabled = !!config?.flags.enableManualPools;
 
   useEffect(() => {
     if (!authLoading && !isLoggedIn) {
@@ -112,12 +135,23 @@ export default function OrganizerCreatePage() {
     }
   };
 
+  const usingManualPool = manualPoolsEnabled && hasDeclaredPool === true;
+  const declaredPoolValid = !usingManualPool || (Number.isInteger(declaredPoolEntry) && declaredPoolEntry > 0);
+
   const canSubmit =
     !!groupType &&
     !!planType &&
     !!tournamentId &&
     name.trim().length >= 2 &&
-    (groupType !== "ORGANIZATION" || !!organizationId);
+    (groupType !== "ORGANIZATION" || !!organizationId) &&
+    // Phase 2: if manual pool is offered, organizer must answer Y/N
+    (!manualPoolsEnabled || hasDeclaredPool !== null) &&
+    declaredPoolValid;
+
+  const poolFeeQuote = useMemo(() => {
+    if (!usingManualPool) return null;
+    return calculatePoolFee(declaredPoolEntry * estimatedPlayers);
+  }, [usingManualPool, declaredPoolEntry, estimatedPlayers]);
 
   const handleSubmit = async () => {
     if (!canSubmit || !groupType || !planType || !tournamentId) return;
@@ -139,7 +173,11 @@ export default function OrganizerCreatePage() {
           prizeDescription: prizeDescription.trim() || undefined,
           rulesDescription: rulesDescription.trim() || undefined,
           publicJoinEnabled,
-          // EXPLICITLY no hasPool / no entryFee — cash pools are out of scope.
+          // Phase 2: Manual Pool (only if flag enabled + organizer opted in)
+          ...(usingManualPool
+            ? { moneyMode: "MANUAL_POOL", declaredPoolEntry }
+            : {}),
+          // EXPLICITLY no hasPool / no entryFee — legacy cash pools out of scope.
         }),
       });
       if (!createRes.ok) {
@@ -358,9 +396,115 @@ export default function OrganizerCreatePage() {
         </Step>
       )}
 
+      {/* Step 2.5 — ¿Hay pozo? (Phase 2, gated) */}
+      {planType && manualPoolsEnabled && (
+        <Step
+          number={groupType === "ORGANIZATION" ? 4 : 3}
+          title="¿Hay un pozo entre los jugadores?"
+        >
+          <div className="space-y-3">
+            <p className="text-xs text-text-muted leading-relaxed">
+              Si tu prode tiene cobro entre jugadores (entrada por persona),
+              ArmaTuProde puede mostrar el pozo y registrar quién pagó.
+              <br />
+              <strong className="text-text-primary">
+                ArmaTuProde no procesa este dinero.
+              </strong>{" "}
+              Vos cobrás y entregás el premio por fuera.
+            </p>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setHasDeclaredPool(false)}
+                className={`rounded-xl border px-3 py-3 text-sm font-display font-bold tracking-wider ${
+                  hasDeclaredPool === false
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border-default bg-bg-surface text-text-muted"
+                }`}
+              >
+                NO, SIN POZO
+                <div className="text-[10px] text-text-muted font-normal tracking-normal mt-1">
+                  Plan fijo
+                </div>
+              </button>
+              <button
+                onClick={() => setHasDeclaredPool(true)}
+                className={`rounded-xl border px-3 py-3 text-sm font-display font-bold tracking-wider ${
+                  hasDeclaredPool === true
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border-default bg-bg-surface text-text-muted"
+                }`}
+              >
+                SÍ, HAY POZO
+                <div className="text-[10px] text-text-muted font-normal tracking-normal mt-1">
+                  Fee dinámico
+                </div>
+              </button>
+            </div>
+
+            {hasDeclaredPool === true && (
+              <div className="space-y-3 rounded-xl border border-border-default bg-bg-surface p-3">
+                <div>
+                  <label className="text-xs text-text-muted mb-1 block">
+                    Entrada por jugador (ARS)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    step={500}
+                    value={declaredPoolEntry}
+                    onChange={(e) =>
+                      setDeclaredPoolEntry(Math.max(1, Math.floor(Number(e.target.value) || 0)))
+                    }
+                    className="w-full rounded-lg border border-border-default bg-bg-primary px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-text-muted mb-1 block">
+                    Jugadores estimados
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={estimatedPlayers}
+                    onChange={(e) =>
+                      setEstimatedPlayers(Math.max(1, Number(e.target.value) || 1))
+                    }
+                    className="w-full rounded-lg border border-border-default bg-bg-primary px-3 py-2 text-sm"
+                  />
+                </div>
+                <div className="rounded-lg bg-bg-primary border border-border-default p-3 space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-text-muted">Pozo estimado</span>
+                    <span className="font-bold text-text-primary">
+                      ${(declaredPoolEntry * estimatedPlayers).toLocaleString("es-AR")} ARS
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-text-muted">Fee plataforma (USD 5 + 7%)</span>
+                    <span className="font-bold text-primary">
+                      USD {poolFeeQuote?.usd.toFixed(2) ?? "—"}
+                    </span>
+                  </div>
+                  {poolFeeQuote?.cappedAt && (
+                    <div className="text-[10px] text-accent">
+                      Tope alcanzado: USD 400 máximo por torneo.
+                    </div>
+                  )}
+                  <div className="text-[10px] text-text-muted pt-1 border-t border-border-default mt-2">
+                    El fee lo pagás vos como organizer al activar. La plata
+                    del pozo NO pasa por ArmaTuProde.
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </Step>
+      )}
+
       {/* Step 3 — Datos */}
-      {planType && (
-        <Step number={groupType === "ORGANIZATION" ? 4 : 3} title="Datos del prode">
+      {planType && (manualPoolsEnabled ? hasDeclaredPool !== null : true) && (
+        <Step number={groupType === "ORGANIZATION" ? (manualPoolsEnabled ? 5 : 4) : (manualPoolsEnabled ? 4 : 3)} title="Datos del prode">
           <div className="space-y-3">
             <div>
               <label className="text-xs text-text-muted mb-1 block">Nombre del prode</label>

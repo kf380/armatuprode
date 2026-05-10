@@ -14,6 +14,8 @@ import {
   AlertTriangle,
   Trophy,
   Lock,
+  Wallet,
+  Check,
 } from "lucide-react";
 import Link from "next/link";
 import { useApp } from "@/lib/store";
@@ -22,6 +24,8 @@ import {
   useGroupBilling,
   useUpdateGroup,
   useResumeGroupPayment,
+  usePoolTracking,
+  usePublicConfig,
   type ApiPrizeType,
 } from "@/lib/hooks";
 import { shareGroupInvite } from "@/lib/share";
@@ -45,11 +49,12 @@ const PLAN_LABEL: Record<string, string> = {
   WHITE_LABEL: "Custom",
 };
 
-type TabKey = "resumen" | "jugadores" | "config" | "billing";
+type TabKey = "resumen" | "jugadores" | "pozo" | "config" | "billing";
 
-const TABS: Array<{ key: TabKey; label: string; icon: React.ComponentType<{ size?: number }> }> = [
+const TABS_BASE: Array<{ key: TabKey; label: string; icon: React.ComponentType<{ size?: number }> }> = [
   { key: "resumen", label: "Resumen", icon: LayoutDashboard },
   { key: "jugadores", label: "Jugadores", icon: Users },
+  { key: "pozo", label: "Pozo", icon: Wallet },
   { key: "config", label: "Config", icon: Settings },
   { key: "billing", label: "Billing", icon: Receipt },
 ];
@@ -57,8 +62,13 @@ const TABS: Array<{ key: TabKey; label: string; icon: React.ComponentType<{ size
 export default function OrganizerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { authLoading, isLoggedIn } = useApp();
+  const { config } = usePublicConfig();
   const { group, loading, error, refetch } = useOrganizerGroup(id);
   const [tab, setTab] = useState<TabKey>("resumen");
+
+  const showPoolTab =
+    !!config?.flags.enableManualPools && group?.moneyMode === "MANUAL_POOL";
+  const TABS = showPoolTab ? TABS_BASE : TABS_BASE.filter((t) => t.key !== "pozo");
 
   useEffect(() => {
     if (!authLoading && !isLoggedIn) {
@@ -167,6 +177,7 @@ export default function OrganizerDetailPage({ params }: { params: Promise<{ id: 
 
       {tab === "resumen" && <TabResumen group={group} inviteUrl={inviteUrl} />}
       {tab === "jugadores" && <TabJugadores group={group} />}
+      {tab === "pozo" && showPoolTab && <TabPozo groupId={id} />}
       {tab === "config" && <TabConfig group={group} onSaved={refetch} />}
       {tab === "billing" && <TabBilling groupId={id} canView={group.permissions.canViewBilling} canResume={group.permissions.canResumePayment} />}
     </div>
@@ -240,6 +251,24 @@ function TabResumen({
           </div>
         )}
       </Card>
+
+      {group.moneyMode === "MANUAL_POOL" && group.declaredPoolEntry && (
+        <Card title="Pozo declarado">
+          <div className="flex items-start gap-2">
+            <Wallet size={16} className="text-primary mt-0.5 shrink-0" />
+            <div>
+              <div className="text-sm text-text-primary">
+                Entrada ${group.declaredPoolEntry.toLocaleString("es-AR")} ·{" "}
+                {group.declaredPoolCurrency ?? "ARS"}
+              </div>
+              <div className="text-[11px] text-text-muted mt-0.5">
+                Gestioná el cobro y el premio por fuera. Ver tab Pozo para
+                marcar quién pagó.
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
 
       <Card title="Reglas">
         {group.rulesDescription ? (
@@ -459,6 +488,145 @@ function TabConfig({
             {msg.tone === "ok" && <CheckCircle2 size={12} />}
             {msg.text}
           </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TabPozo({ groupId }: { groupId: string }) {
+  const { data, loading, error, refetch, setPaid } = usePoolTracking(groupId);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+
+  if (loading) {
+    return <Loader2 className="animate-spin text-primary mx-auto" size={20} />;
+  }
+  if (error || !data) {
+    return (
+      <div className="rounded-2xl border border-danger/30 bg-danger/5 p-4 text-sm text-text-primary">
+        {error || "No se pudo cargar el tracking"}
+        <button onClick={() => refetch()} className="ml-2 underline text-primary">
+          reintentar
+        </button>
+      </div>
+    );
+  }
+
+  const onToggle = async (userId: string, current: boolean) => {
+    setUpdatingId(userId);
+    setErrMsg(null);
+    try {
+      await setPaid(userId, !current);
+    } catch (e) {
+      setErrMsg(e instanceof Error ? e.message : "Error");
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const progressPct =
+    data.members.length > 0 ? Math.round((data.paidCount / data.members.length) * 100) : 0;
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-border-default bg-bg-surface p-4">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="font-display text-[10px] tracking-widest font-bold text-text-muted">
+            POZO DECLARADO
+          </h3>
+          <span className="text-[10px] text-text-muted">
+            entrada ${data.declaredPoolEntry.toLocaleString("es-AR")} · {data.declaredPoolCurrency}
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <div className="rounded-xl bg-bg-primary border border-border-default p-3">
+            <div className="text-[10px] uppercase tracking-wider text-text-muted">Total estimado</div>
+            <div className="text-sm font-bold text-text-primary mt-0.5">
+              ${data.totalDeclared.toLocaleString("es-AR")}
+            </div>
+          </div>
+          <div className="rounded-xl bg-bg-primary border border-border-default p-3">
+            <div className="text-[10px] uppercase tracking-wider text-text-muted">Cobrado</div>
+            <div className="text-sm font-bold text-primary mt-0.5">
+              ${data.totalCollected.toLocaleString("es-AR")}
+            </div>
+          </div>
+        </div>
+        <div className="h-2 w-full overflow-hidden rounded-full bg-bg-primary mb-1">
+          <div
+            className="h-full bg-gradient-to-r from-primary to-accent transition-all"
+            style={{ width: `${progressPct}%` }}
+          />
+        </div>
+        <div className="text-[10px] text-text-muted">
+          {data.paidCount}/{data.members.length} jugadores marcaron como pagado · {progressPct}%
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-accent/30 bg-accent/5 p-3 text-xs text-text-primary leading-relaxed">
+        <strong>ArmaTuProde no procesa este dinero.</strong> Vos cobrás por
+        fuera (transferencia, MP, efectivo). Esta tabla es solo un registro
+        compartido para que tu grupo vea quién pagó.
+      </div>
+
+      {errMsg && (
+        <div className="rounded-xl border border-danger/30 bg-danger/5 p-2 text-xs text-danger">
+          {errMsg}
+        </div>
+      )}
+
+      <div className="rounded-2xl border border-border-default bg-bg-surface overflow-hidden">
+        <div className="grid grid-cols-[1fr_auto] gap-3 px-4 py-2 text-[10px] uppercase tracking-wider text-text-muted border-b border-border-default">
+          <span>Jugador</span>
+          <span>Estado</span>
+        </div>
+        {data.members.length === 0 ? (
+          <div className="px-4 py-6 text-center text-sm text-text-muted">
+            Aún no se sumó nadie al prode.
+          </div>
+        ) : (
+          data.members.map((m) => (
+            <div
+              key={m.userId}
+              className="grid grid-cols-[1fr_auto] gap-3 px-4 py-2.5 items-center text-sm border-b border-border-default last:border-0"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                {m.avatar ? (
+                  <span className="text-xl">{m.avatar}</span>
+                ) : (
+                  <div className="size-7 rounded-full bg-bg-primary border border-border-default" />
+                )}
+                <div className="min-w-0">
+                  <div className="text-sm text-text-primary truncate">{m.name}</div>
+                  {m.paidAt && (
+                    <div className="text-[10px] text-text-muted">
+                      pagó {new Date(m.paidAt).toLocaleDateString("es-AR")}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => onToggle(m.userId, m.paid)}
+                disabled={updatingId === m.userId}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-display font-bold tracking-wider transition-all disabled:opacity-50 ${
+                  m.paid
+                    ? "bg-primary text-bg-primary"
+                    : "border border-border-default text-text-muted hover:border-primary/30"
+                }`}
+              >
+                {updatingId === m.userId ? (
+                  <Loader2 size={12} className="animate-spin" />
+                ) : m.paid ? (
+                  <>
+                    <Check size={12} /> PAGÓ
+                  </>
+                ) : (
+                  "MARCAR"
+                )}
+              </button>
+            </div>
+          ))
         )}
       </div>
     </div>

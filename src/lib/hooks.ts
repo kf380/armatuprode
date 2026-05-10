@@ -117,6 +117,11 @@ export interface ApiGroup {
   billingStatus: string | null;
   paymentResponsibility: ApiPaymentResponsibility;
   organizationId: string | null;
+  // Phase 2: Manual Pool (always present in GET responses; null when MoneyMode=NONE)
+  moneyMode?: "NONE" | "MANUAL_POOL" | "AUTOMATED_POOL";
+  declaredPoolEntry?: number | null;
+  declaredPoolCurrency?: string | null;
+  declaredPoolUpdatedAt?: string | null;
 }
 
 export interface ScreenGroup {
@@ -826,6 +831,8 @@ export interface PublicConfig {
     enablePersonalGroups: boolean;
     enableOrganizationPlans: boolean;
     enablePlayerPayments: boolean;
+    enableManualPools: boolean;
+    enablePlayerPremium: boolean;
   };
   limits: {
     maxPoolParticipants: number;
@@ -844,6 +851,8 @@ const DEFAULT_CONFIG: PublicConfig = {
     enablePersonalGroups: true,
     enableOrganizationPlans: true,
     enablePlayerPayments: false,
+    enableManualPools: false,
+    enablePlayerPremium: false,
   },
   limits: { maxPoolParticipants: 50, maxEntryFee: 20000 },
 };
@@ -1194,6 +1203,142 @@ export function useUpdateGroup() {
   );
 
   return { updateGroup };
+}
+
+export interface ApiPoolTrackingMember {
+  userId: string;
+  name: string;
+  avatar: string | null;
+  role: string;
+  paid: boolean;
+  paidAt: string | null;
+  note: string | null;
+}
+
+export interface ApiPoolTracking {
+  moneyMode: "NONE" | "MANUAL_POOL" | "AUTOMATED_POOL";
+  declaredPoolEntry: number;
+  declaredPoolCurrency: string;
+  totalDeclared: number;
+  totalCollected: number;
+  paidCount: number;
+  pendingCount: number;
+  members: ApiPoolTrackingMember[];
+}
+
+export function usePoolTracking(groupId: string | null) {
+  const { authFetch } = useApp();
+  const [data, setData] = useState<ApiPoolTracking | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchTracking = useCallback(
+    async (id: string) => {
+      try {
+        setLoading(true);
+        const res = await authFetch(`/api/groups/${id}/pool-tracking`);
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}));
+          throw new Error(j.error || "No se pudo cargar el tracking");
+        }
+        setData(await res.json());
+        setError(null);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Error");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [authFetch],
+  );
+
+  useEffect(() => {
+    if (groupId) fetchTracking(groupId);
+    else setData(null);
+  }, [groupId, fetchTracking]);
+
+  const setPaid = useCallback(
+    async (userId: string, paid: boolean, note?: string | null) => {
+      if (!groupId) return;
+      const res = await authFetch(`/api/groups/${groupId}/pool-tracking`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, paid, ...(note !== undefined ? { note } : {}) }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || "No se pudo actualizar");
+      }
+      await fetchTracking(groupId);
+    },
+    [groupId, authFetch, fetchTracking],
+  );
+
+  return {
+    data,
+    loading,
+    error,
+    refetch: () => groupId && fetchTracking(groupId),
+    setPaid,
+  };
+}
+
+export interface ApiPremiumMembership {
+  tournamentId: string;
+  tournamentName: string;
+  paidAt: string;
+  validUntil: string;
+  amountUsd: number;
+}
+
+export function usePlayerPremium() {
+  const { authFetch } = useApp();
+  const [isPremium, setIsPremium] = useState(false);
+  const [memberships, setMemberships] = useState<ApiPremiumMembership[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetch = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await authFetch("/api/users/premium");
+      if (!res.ok) {
+        setIsPremium(false);
+        setMemberships([]);
+        return;
+      }
+      const data = await res.json();
+      setIsPremium(data.isPremium ?? false);
+      setMemberships(data.memberships ?? []);
+    } finally {
+      setLoading(false);
+    }
+  }, [authFetch]);
+
+  useEffect(() => {
+    fetch();
+  }, [fetch]);
+
+  return { isPremium, memberships, loading, refetch: fetch };
+}
+
+export function useBuyPlayerPremium() {
+  const { authFetch } = useApp();
+
+  const buy = useCallback(
+    async (tournamentId: string) => {
+      const res = await authFetch("/api/payments/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "player_premium", tournamentId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "No se pudo iniciar el pago");
+      return data as { initPoint: string; orderId: string };
+    },
+    [authFetch],
+  );
+
+  return { buy };
 }
 
 export function useResumeGroupPayment() {

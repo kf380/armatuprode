@@ -19,6 +19,8 @@ export async function GET() {
       enablePersonalGroups: flags.enablePersonalGroups(),
       enableOrganizationPlans: flags.enableOrganizationPlans(),
       enablePlayerPayments: flags.enablePlayerPayments(),
+      enableManualPools: flags.enableManualPools(),
+      enablePlayerPremium: flags.enablePlayerPremium(),
     },
     limits: {
       maxPoolParticipants: limits.maxPoolParticipants(),

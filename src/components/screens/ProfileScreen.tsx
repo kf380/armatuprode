@@ -2,10 +2,16 @@
 
 import { useMemo } from "react";
 import { motion } from "framer-motion";
-import { Settings, Share2, ChevronRight } from "lucide-react";
+import { Settings, Share2, ChevronRight, Crown } from "lucide-react";
 import XPBar from "@/components/XPBar";
 import { useApp } from "@/lib/store";
-import { useUserStats, useUserBadges, deriveLevel } from "@/lib/hooks";
+import {
+  useUserStats,
+  useUserBadges,
+  deriveLevel,
+  usePlayerPremium,
+  usePublicConfig,
+} from "@/lib/hooks";
 import { getReferralContent } from "@/lib/share";
 import ShareButton from "@/components/ShareButton";
 import { currentUser as mockUser, badges as mockBadges, levels } from "@/lib/mock-data";
@@ -23,6 +29,8 @@ export default function ProfileScreen() {
   const { dbUser, setActiveTab, setScreen } = useApp();
   const { stats } = useUserStats();
   const { badges: apiBadges, loading: badgesLoading } = useUserBadges();
+  const { config } = usePublicConfig();
+  const { isPremium } = usePlayerPremium();
 
   const user = useMemo(() => {
     if (!dbUser) return mockUser;
@@ -71,8 +79,23 @@ export default function ProfileScreen() {
         >
           {user.avatar}
         </div>
-        <h2 className="text-xl font-bold">{user.name}</h2>
+        <div className="flex items-center justify-center gap-2">
+          <h2 className="text-xl font-bold">{user.name}</h2>
+          {isPremium && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-accent/40 bg-accent/15 px-2 py-0.5 text-[10px] font-display tracking-widest font-bold text-accent">
+              <Crown size={10} /> PREMIUM
+            </span>
+          )}
+        </div>
         <p className="text-sm text-text-muted">{user.country} {user.countryName}</p>
+        {!isPremium && config?.flags.enablePlayerPremium && (
+          <a
+            href="/premium"
+            className="inline-flex items-center gap-1 mt-2 text-[11px] text-accent hover:underline"
+          >
+            <Crown size={10} /> Activar Premium · USD 2
+          </a>
+        )}
         <div className="mt-3">
           <XPBar
             level={user.level}

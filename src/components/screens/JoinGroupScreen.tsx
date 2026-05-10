@@ -31,6 +31,10 @@ interface InviteGroupInfo {
   hasPool: boolean;
   entryFee: number;
   currency: string;
+  // Phase 2: Manual Pool (only sent when ENABLE_MANUAL_POOLS=true)
+  moneyMode?: "NONE" | "MANUAL_POOL" | "AUTOMATED_POOL";
+  declaredPoolEntry?: number | null;
+  declaredPoolCurrency?: string | null;
 }
 
 const STATUS_BLOCK_MESSAGE: Record<Exclude<ApiGroupStatus, "ACTIVE">, string> = {
@@ -312,6 +316,41 @@ export default function JoinGroupScreen() {
               </div>
             </div>
           )}
+
+          {/* Phase 2: Manual Pool — declared pool block (informational, no money custody) */}
+          {config.flags.enableManualPools &&
+            groupInfo.moneyMode === "MANUAL_POOL" &&
+            groupInfo.declaredPoolEntry &&
+            groupInfo.declaredPoolEntry > 0 && (
+              <div className="mt-4 rounded-xl border border-primary/30 bg-primary/5 p-3">
+                <div className="text-[10px] font-display tracking-widest text-primary/80 mb-1">
+                  POZO DECLARADO POR EL ORGANIZADOR
+                </div>
+                <div className="flex items-baseline justify-between mb-2">
+                  <span className="text-xs text-text-muted">Entrada por jugador</span>
+                  <span className="font-display text-base font-bold text-primary">
+                    ${groupInfo.declaredPoolEntry.toLocaleString("es-AR")}{" "}
+                    {groupInfo.declaredPoolCurrency ?? "ARS"}
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-xs text-text-muted">Pozo estimado actual</span>
+                  <span className="font-display text-sm font-bold text-text-primary">
+                    $
+                    {(
+                      groupInfo.declaredPoolEntry * (groupInfo.memberCount + 1)
+                    ).toLocaleString("es-AR")}
+                  </span>
+                </div>
+                <div className="mt-3 pt-3 border-t border-primary/20 text-[11px] text-text-muted leading-relaxed">
+                  <strong className="text-text-primary">
+                    ArmaTuProde no procesa este dinero.
+                  </strong>{" "}
+                  Pagás directo a {groupInfo.createdBy} (transferencia, MP,
+                  efectivo). El organizador entrega el premio por fuera.
+                </div>
+              </div>
+            )}
         </div>
 
         {/* Status / capacity block message */}
