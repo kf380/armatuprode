@@ -2,7 +2,8 @@
 
 import { useMemo } from "react";
 import { motion } from "framer-motion";
-import { Settings, Share2, ChevronRight, Crown } from "lucide-react";
+import { useState } from "react";
+import { Settings, Share2, ChevronRight, Crown, LogOut, Loader2 } from "lucide-react";
 import XPBar from "@/components/XPBar";
 import { useApp } from "@/lib/store";
 import {
@@ -26,11 +27,23 @@ const fadeUp = {
 } as const;
 
 export default function ProfileScreen() {
-  const { dbUser, setActiveTab, setScreen } = useApp();
+  const { dbUser, setActiveTab, setScreen, signOut } = useApp();
   const { stats } = useUserStats();
   const { badges: apiBadges, loading: badgesLoading } = useUserBadges();
   const { config } = usePublicConfig();
   const { isPremium } = usePlayerPremium();
+  const [signingOut, setSigningOut] = useState(false);
+
+  const handleSignOut = async () => {
+    if (signingOut) return;
+    if (!window.confirm("¿Seguro que querés cerrar sesión?")) return;
+    setSigningOut(true);
+    try {
+      await signOut();
+    } catch {
+      setSigningOut(false);
+    }
+  };
 
   const user = useMemo(() => {
     if (!dbUser) return mockUser;
@@ -260,6 +273,22 @@ export default function ProfileScreen() {
         </button>
         <button className="w-full rounded-xl border border-border-default bg-bg-surface py-3 text-xs text-text-muted flex items-center justify-center gap-2 hover:bg-bg-surface-hover transition-all">
           Historial completo <ChevronRight size={14} />
+        </button>
+
+        <button
+          onClick={handleSignOut}
+          disabled={signingOut}
+          className="w-full rounded-xl border border-danger/30 bg-danger/5 py-3 text-xs text-danger flex items-center justify-center gap-2 hover:bg-danger/10 transition-all disabled:opacity-50"
+        >
+          {signingOut ? (
+            <>
+              <Loader2 size={14} className="animate-spin" /> Cerrando sesión...
+            </>
+          ) : (
+            <>
+              <LogOut size={14} /> Cerrar sesión
+            </>
+          )}
         </button>
       </motion.div>
 
