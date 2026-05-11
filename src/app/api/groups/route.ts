@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/supabase-server";
-import { flags } from "@/lib/flags";
+import { flags, canPlayersBeCharged } from "@/lib/flags";
 import { limits } from "@/lib/limits";
 import { PLANS, isPublicPlan, resolveLimits } from "@/lib/plans";
 import type { GroupType, PlanType } from "@prisma/client";
@@ -161,8 +161,11 @@ export async function POST(request: NextRequest) {
   }
 
   // ---- Legacy cash-pool path (POOL_ENTRY) — strictly gated ----
+  // Triple gate (canPlayersBeCharged): require enableRealMoneyPools +
+  // enablePlayerPayments + legalRealMoneyPoolsApproved. Defense-in-depth:
+  // a single flag flipped by mistake must not open player charging.
   if (hasPool) {
-    if (!flags.enableRealMoneyPools()) {
+    if (!canPlayersBeCharged()) {
       return NextResponse.json(
         { error: "Los pozos con dinero real no están habilitados" },
         { status: 403 },

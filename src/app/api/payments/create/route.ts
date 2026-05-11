@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/supabase-server";
 import { createMPPreference } from "@/lib/mercadopago";
 import { rateLimit } from "@/lib/ratelimit";
-import { flags } from "@/lib/flags";
+import { flags, canPlayersBeCharged } from "@/lib/flags";
 import { limits } from "@/lib/limits";
 import { log } from "@/lib/log";
 import { PLANS, isPublicPlan, priceFor, priceForPool, priceForPlayerPremium } from "@/lib/plans";
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
     metadata = { packCoins: pack.coins, packId };
     paymentType = "COIN_PACK";
   } else if (type === "pool_entry") {
-    if (!flags.enableRealMoneyPools()) {
+    if (!canPlayersBeCharged()) {
       return NextResponse.json(
         { error: "Los pozos con dinero real no estan habilitados todavia" },
         { status: 403 },

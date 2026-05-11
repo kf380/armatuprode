@@ -8,6 +8,7 @@ import { useGroups, useGroupDetail, useGroupActivity, useGroupChat, usePublicCon
 import { STICKERS_BY_CATEGORY, type Sticker } from "@/lib/stickers";
 import { getGroupInviteContent, getRankingContent, shareGroupInvite } from "@/lib/share";
 import ShareButton from "@/components/ShareButton";
+import Link from "next/link";
 
 const stagger = {
   hidden: {},
@@ -19,10 +20,6 @@ const fadeUp = {
 } as const;
 
 type GroupTab = "ranking" | "activity" | "chat";
-
-type GroupType = "fun" | "pool";
-
-const ENTRY_FEE_PRESETS = [2000, 5000, 10000];
 
 function formatChatTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -81,8 +78,6 @@ export default function GroupsScreen() {
   } | null>(null);
 
   // Create group modal state
-  const [createGroupType, setCreateGroupType] = useState<GroupType>("fun");
-  const [createEntryFee, setCreateEntryFee] = useState<number>(5000);
   const [createName, setCreateName] = useState("");
   const [createEmoji, setCreateEmoji] = useState("🏆");
 
@@ -181,9 +176,6 @@ export default function GroupsScreen() {
           name: createName,
           emoji: createEmoji,
           tournamentId,
-          hasPool: createGroupType === "pool",
-          entryFee: createGroupType === "pool" ? createEntryFee : 0,
-          currency: "ARS",
         }),
       });
 
@@ -195,8 +187,6 @@ export default function GroupsScreen() {
       }
 
       setShowCreate(false);
-      setCreateGroupType("fun");
-      setCreateEntryFee(5000);
       setCreateName("");
       setCreateEmoji("🏆");
       refetchGroups();
@@ -928,88 +918,13 @@ export default function GroupsScreen() {
                   </div>
                 </div>
 
-                <div>
-                  <label className="text-xs text-text-muted mb-1.5 block">Tipo</label>
-                  <div className="space-y-2">
-                    <button
-                      onClick={() => setCreateGroupType("fun")}
-                      className={`w-full rounded-xl border p-3 text-left transition-colors ${
-                        createGroupType === "fun"
-                          ? "border-primary/40 bg-primary/5"
-                          : "border-border-default bg-bg-primary hover:border-primary/20"
-                      }`}
-                    >
-                      <div className="text-sm font-semibold">Solo por diversion</div>
-                      <div className="text-xs text-text-muted">Sin dinero, solo gloria</div>
-                    </button>
-                    <button
-                      onClick={() => setCreateGroupType("pool")}
-                      className={`w-full rounded-xl border p-3 text-left transition-colors ${
-                        createGroupType === "pool"
-                          ? "border-accent/40 bg-accent/5"
-                          : "border-border-default bg-bg-primary hover:border-accent/30"
-                      }`}
-                    >
-                      <div className="text-sm font-semibold flex items-center gap-1">
-                        Con pozo de premios <span className="text-accent text-xs">💰</span>
-                      </div>
-                      <div className="text-xs text-text-muted">Cada miembro aporta al pozo</div>
-                    </button>
-                  </div>
+                <div className="rounded-xl border border-border-default bg-bg-surface p-3 text-xs text-text-secondary leading-relaxed">
+                  ¿Querés un prode con pozo o premio? Usá el wizard nuevo desde{" "}
+                  <Link href="/organizer/create" className="text-primary underline">
+                    crear prode
+                  </Link>{" "}
+                  — ahí podés definir pozo declarado y premios.
                 </div>
-
-                {/* Entry fee section — only when pool type */}
-                <AnimatePresence>
-                  {createGroupType === "pool" && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.25 }}
-                      className="overflow-hidden"
-                    >
-                      <div className="space-y-3 pt-1">
-                        <div>
-                          <label className="text-xs text-text-muted mb-1.5 block">Entrada por persona</label>
-                          <div className="flex gap-2">
-                            {ENTRY_FEE_PRESETS.map((fee) => (
-                              <button
-                                key={fee}
-                                onClick={() => setCreateEntryFee(fee)}
-                                className={`flex-1 rounded-xl border py-2.5 font-display text-xs font-bold tracking-wider transition-colors ${
-                                  createEntryFee === fee
-                                    ? "border-accent/50 bg-accent/10 text-accent"
-                                    : "border-border-default bg-bg-primary text-text-secondary hover:border-accent/30"
-                                }`}
-                              >
-                                ${fee.toLocaleString()}
-                              </button>
-                            ))}
-                          </div>
-                          <input
-                            type="number"
-                            placeholder="O ingresa monto personalizado"
-                            value={createEntryFee || ""}
-                            onChange={(e) => setCreateEntryFee(Number(e.target.value))}
-                            className="mt-2 w-full rounded-xl border border-border-default bg-bg-primary px-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-accent/50 focus:outline-none transition-colors"
-                          />
-                        </div>
-
-                        <div className="rounded-xl border border-accent/20 bg-accent/5 p-3">
-                          <div className="text-[10px] font-display tracking-widest text-accent/70 mb-1">PREVIEW DEL POZO (10 miembros)</div>
-                          <div className="font-display text-xl font-bold text-accent">
-                            ${(createEntryFee * 10).toLocaleString()} ARS
-                          </div>
-                          <div className="mt-2 flex gap-3 text-[10px] text-text-muted">
-                            <span>🥇 50% = ${(createEntryFee * 10 * 0.5).toLocaleString()}</span>
-                            <span>🥈 30% = ${(createEntryFee * 10 * 0.3).toLocaleString()}</span>
-                            <span>🥉 20% = ${(createEntryFee * 10 * 0.2).toLocaleString()}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
               </div>
 
               <button

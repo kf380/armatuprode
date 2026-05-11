@@ -221,13 +221,33 @@ describe("Webhook GROUP_ACTIVATION cross-validation", () => {
 describe("/api/groups/by-invite gating", () => {
   const file = read("src/app/api/groups/by-invite/[code]/route.ts");
 
-  it("uses flags to gate hasPool/entryFee exposure", () => {
-    expect(file).toMatch(/flags\.enableRealMoneyPools/);
-    expect(file).toMatch(/flags\.enablePlayerPayments/);
+  it("uses canPlayersBeCharged triple gate to expose hasPool/entryFee", () => {
+    expect(file).toMatch(/canPlayersBeCharged\(\)/);
+    expect(file).not.toMatch(/flags\.enableRealMoneyPools\(\) &&/);
   });
 
   it("neutralizes hasPool to false when flags are off", () => {
     expect(file).toMatch(/hasPool:\s*false/);
+  });
+});
+
+describe("triple gate enforcement on player-charging paths", () => {
+  it("payments/create pool_entry branch uses canPlayersBeCharged()", () => {
+    const file = read("src/app/api/payments/create/route.ts");
+    expect(file).toMatch(/type === "pool_entry"[\s\S]{0,200}canPlayersBeCharged\(\)/);
+    expect(file).not.toMatch(/type === "pool_entry"[\s\S]{0,200}!flags\.enableRealMoneyPools\(\)/);
+  });
+
+  it("groups/route.ts hasPool creation path uses canPlayersBeCharged()", () => {
+    const file = read("src/app/api/groups/route.ts");
+    expect(file).toMatch(/if \(hasPool\) \{[\s\S]{0,400}canPlayersBeCharged\(\)/);
+    expect(file).not.toMatch(/if \(hasPool\) \{[\s\S]{0,200}!flags\.enableRealMoneyPools\(\)/);
+  });
+
+  it("GroupsScreen no longer sends hasPool/entryFee to /api/groups", () => {
+    const file = read("src/components/screens/GroupsScreen.tsx");
+    expect(file).not.toMatch(/hasPool:\s*createGroupType\s*===\s*"pool"/);
+    expect(file).not.toMatch(/entryFee:\s*createGroupType\s*===\s*"pool"/);
   });
 });
 

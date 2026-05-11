@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { flags } from "@/lib/flags";
+import { flags, canPlayersBeCharged } from "@/lib/flags";
 
 // Public endpoint (no auth required) — returns basic group info by invite code
 export async function GET(
@@ -59,10 +59,10 @@ export async function GET(
             slug: group.organization.slug,
           }
         : null,
-      // Legacy cash-pool fields. Only exposed if BOTH flags allow them. With
-      // ENABLE_REAL_MONEY_POOLS=false or ENABLE_PLAYER_PAYMENTS=false the
-      // payload is neutralized so the UI cannot render pool entry copy.
-      ...(flags.enableRealMoneyPools() && flags.enablePlayerPayments()
+      // Legacy cash-pool fields. Only exposed when the triple gate is open
+      // (canPlayersBeCharged). With any of the three flags off the payload is
+      // neutralized so the UI cannot render pool entry copy.
+      ...(canPlayersBeCharged()
         ? {
             hasPool: group.hasPool,
             entryFee: group.entryFee,
