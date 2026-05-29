@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { AppProvider, useApp } from "@/lib/store";
+import { savePendingJoinCode, readPendingJoinCode } from "@/lib/join-code";
 import TabBar from "@/components/TabBar";
 import SplashScreen from "@/components/screens/SplashScreen";
 import LoginScreen from "@/components/screens/LoginScreen";
@@ -85,7 +86,7 @@ function DeepLinkHandler() {
       setScreen("join-group");
     } else {
       // Not logged in — save code for after login
-      localStorage.setItem("pendingJoinCode", joinCode);
+      savePendingJoinCode(joinCode);
     }
   }, [isLoggedIn, authLoading, setScreen]);
 
@@ -93,7 +94,7 @@ function DeepLinkHandler() {
   useEffect(() => {
     if (!isLoggedIn) return;
 
-    const pendingCode = localStorage.getItem("pendingJoinCode");
+    const pendingCode = readPendingJoinCode();
     if (pendingCode) {
       setScreen("join-group");
     }

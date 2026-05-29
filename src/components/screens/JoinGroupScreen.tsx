@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { Users, Trophy, ArrowRight, Loader2, Lock, AlertTriangle } from "lucide-react";
 import { useApp } from "@/lib/store";
 import { usePublicConfig } from "@/lib/hooks";
+import { readPendingJoinCode, clearPendingJoinCode } from "@/lib/join-code";
 import type { ApiGroupStatus, ApiGroupKind, ApiPlanType, ApiPrizeType } from "@/lib/hooks";
 import { CheckBallLogo } from "@/components/CheckBallLogo";
 
@@ -58,12 +59,12 @@ export default function JoinGroupScreen() {
   const [logoFailed, setLogoFailed] = useState(false);
 
   const inviteCode = typeof window !== "undefined"
-    ? new URLSearchParams(window.location.search).get("join") || localStorage.getItem("pendingJoinCode")
+    ? new URLSearchParams(window.location.search).get("join") || readPendingJoinCode()
     : null;
 
   useEffect(() => {
     if (!inviteCode) {
-      setLoading(false);
+      setScreen("main");
       return;
     }
 
@@ -78,12 +79,13 @@ export default function JoinGroupScreen() {
         const res = await fetch(`/api/groups/by-invite/${inviteCode}`);
         if (!res.ok) {
           setError("Grupo no encontrado o link invalido");
+          clearPendingJoinCode();
           setLoading(false);
           return;
         }
         const data = await res.json();
         setGroupInfo(data.group);
-        localStorage.removeItem("pendingJoinCode");
+        clearPendingJoinCode();
       } catch {
         setError("Error de conexion");
       }
@@ -91,7 +93,7 @@ export default function JoinGroupScreen() {
     };
 
     fetchGroup();
-  }, [inviteCode]);
+  }, [inviteCode, setScreen]);
 
   const handleJoin = async () => {
     if (!groupInfo) return;

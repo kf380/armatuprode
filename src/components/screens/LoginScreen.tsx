@@ -5,6 +5,16 @@ import { motion } from "framer-motion";
 import { useApp } from "@/lib/store";
 import { createBrowserClient } from "@/lib/supabase";
 import { CheckBallLogo } from "@/components/CheckBallLogo";
+import { readPendingJoinCode } from "@/lib/join-code";
+
+function buildAuthCallback(): string {
+  const origin = window.location.origin;
+  const joinFromUrl = new URLSearchParams(window.location.search).get("join");
+  const joinCode = joinFromUrl || readPendingJoinCode();
+  if (!joinCode) return `${origin}/api/auth/callback`;
+  const next = `/?join=${encodeURIComponent(joinCode)}`;
+  return `${origin}/api/auth/callback?next=${encodeURIComponent(next)}`;
+}
 
 export default function LoginScreen() {
   const { setScreen } = useApp();
@@ -21,7 +31,7 @@ export default function LoginScreen() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/api/auth/callback`,
+        redirectTo: buildAuthCallback(),
       },
     });
     if (error) setError(error.message);
@@ -41,7 +51,7 @@ export default function LoginScreen() {
         email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/api/auth/callback`,
+          emailRedirectTo: buildAuthCallback(),
         },
       });
       if (error) {
