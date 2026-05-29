@@ -20,7 +20,7 @@ export async function sendPushToUser(userId: string, title: string, body: string
     return;
   }
 
-  webpush.setVapidDetails("mailto:hello@armatuprode.com.ar", publicKey, privateKey);
+  webpush.setVapidDetails("mailto:hola@armatuprode.com.ar", publicKey, privateKey);
 
   const subscriptions = await prisma.pushSubscription.findMany({
     where: { userId },

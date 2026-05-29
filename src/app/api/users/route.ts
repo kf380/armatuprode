@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
     const userCount = await prisma.user.count();
     if (userCount >= limits.maxPublicUsers()) {
       return NextResponse.json(
-        { error: "Estamos en beta cerrada. Pedí tu invitación a hello@armatuprode.com.ar." },
+        { error: "Estamos en beta cerrada. Pedí tu invitación a hola@armatuprode.com.ar." },
         { status: 403 },
       );
     }

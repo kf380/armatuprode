@@ -229,7 +229,7 @@ export default function OrganizerCreatePage() {
       {!tournamentsLoading && !tournamentId && (
         <div className="mb-4 rounded-xl border border-danger/40 bg-danger/10 px-4 py-3 text-xs text-danger">
           No hay torneo activo configurado. Contactá soporte en{" "}
-          <strong>hello@armatuprode.com.ar</strong> para que activen un torneo.
+          <strong>hola@armatuprode.com.ar</strong> para que activen un torneo.
         </div>
       )}
 
