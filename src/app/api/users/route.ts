@@ -6,6 +6,7 @@ import { WalletLotSource } from "@prisma/client";
 import { log } from "@/lib/log";
 import { rateLimit } from "@/lib/ratelimit";
 import { limits } from "@/lib/limits";
+import { sendWelcomeEmail } from "@/lib/welcome-email";
 
 export async function POST(request: NextRequest) {
   try {
@@ -104,6 +105,11 @@ export async function POST(request: NextRequest) {
       }
     } else {
       log("info", "welcome_bonus_deferred_email_unverified", { userId: dbUser.id });
+    }
+
+    // Welcome email — fire after creating row. Helper traga errores; no rompe signup.
+    if (emailConfirmed || !isProd) {
+      await sendWelcomeEmail({ email: dbUser.email, name: dbUser.name });
     }
 
     return NextResponse.json({ user: dbUser }, { status: 201 });
