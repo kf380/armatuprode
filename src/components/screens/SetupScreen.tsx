@@ -19,8 +19,12 @@ const countries = [
 ];
 
 export default function SetupScreen() {
-  const { setScreen, setIsLoggedIn, setDbUser, authFetch } = useApp();
-  const [name, setName] = useState("");
+  const { setScreen, setIsLoggedIn, setDbUser, authFetch, authUser } = useApp();
+  const [name, setName] = useState(() => {
+    const meta = authUser?.user_metadata as { full_name?: string; name?: string } | undefined;
+    const fromGoogle = (meta?.full_name ?? meta?.name ?? "").trim();
+    return fromGoogle.slice(0, 20);
+  });
   const [avatar, setAvatar] = useState("🎮");
   const [country, setCountry] = useState("🇦🇷");
   const [loading, setLoading] = useState(false);
