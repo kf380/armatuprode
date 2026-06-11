@@ -47,7 +47,7 @@ export default function ShareMenu({ open, onClose, content, title = "Compartir" 
         <>
           {/* Backdrop */}
           <motion.div
-            className="fixed inset-0 z-50 bg-black/60"
+            className="fixed inset-0 z-[60] bg-black/60"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -56,7 +56,7 @@ export default function ShareMenu({ open, onClose, content, title = "Compartir" 
 
           {/* Bottom sheet */}
           <motion.div
-            className="fixed bottom-0 left-0 right-0 z-50 mx-auto max-w-lg rounded-t-2xl bg-bg-surface border-t border-border-default p-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
+            className="fixed bottom-0 left-0 right-0 z-[60] mx-auto max-w-lg rounded-t-2xl bg-bg-surface border-t border-border-default p-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
             initial={{ y: "100%" }}
             animate={{ y: 0 }}
             exit={{ y: "100%" }}

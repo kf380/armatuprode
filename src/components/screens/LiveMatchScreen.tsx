@@ -268,7 +268,7 @@ export default function LiveMatchScreen() {
             initial={{ opacity: 0, scale: 0.8, y: 50 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.8, y: -50 }}
-            className="fixed inset-x-5 bottom-24 rounded-2xl bg-accent/95 p-5 text-center shadow-2xl z-50"
+            className="fixed inset-x-5 bottom-24 rounded-2xl bg-accent/95 p-5 text-center shadow-2xl z-[60]"
           >
             <div className="text-3xl mb-1">⚽</div>
             <div className="font-display text-xl font-bold text-bg-primary tracking-wider">
