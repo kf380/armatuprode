@@ -1,12 +1,15 @@
 /**
- * Kick-off mail pre-Mundial. Pensado para correr 9-jun (~48hs antes del primer partido).
- * Toma TODOS los users de la tabla User dinámicamente (excluye al sender).
+ * Kick-off mail día de arranque del Mundial. Segmenta por estado:
+ *   - SIN_GRUPO: invita a crear grupo y pasar el link por WhatsApp.
+ *   - CON_GRUPO: empuja a dejar la pick cargada antes de las 19hs.
  *
- *   npx tsx scripts/send-kickoff-mundial.ts             # dry-run (preview todos)
- *   npx tsx scripts/send-kickoff-mundial.ts --test      # solo a TEST_RECIPIENT
+ *   npx tsx scripts/send-kickoff-mundial.ts             # dry-run (preview por segmento)
+ *   npx tsx scripts/send-kickoff-mundial.ts --test      # solo a TEST_RECIPIENT (las 2 versiones)
  *   npx tsx scripts/send-kickoff-mundial.ts --send      # live (manda a todos)
  *
- * Para targeting más fino, sumar flags --only-no-pick o --only-no-group.
+ * Flags:
+ *   --only-no-group    solo a users sin grupo
+ *   --only-with-group  solo a users con grupo
  */
 import { config } from "dotenv";
 config({ path: ".env.local" });
@@ -21,36 +24,74 @@ const EXCLUDE_EMAILS = new Set([
   "kevinfavre@gmail.com", // sender
 ]);
 
-const FIRST_MATCH = {
-  date: "11 de junio",
-  teamA: "Mexico",
-  teamB: "South Africa",
-  time: "19:00 hora argentina",
-};
-
 const firstNameOf = prettifyFirstName;
 
-const subjectFor = (name: string) =>
-  `${firstNameOf(name)}, faltan 48hs para el primer partido del Mundial`;
+const STOPWORDS = new Set([
+  "el","la","los","las","mi","un","una","sin","con","de","del","mr","sr","sra",
+]);
 
-const bodyFor = (name: string) => `Hola ${firstNameOf(name)}, ¿cómo estás?
+function safeFirstName(name: string): string | null {
+  const fn = firstNameOf(name);
+  if (!fn) return null;
+  if (fn.length < 3) return null;
+  if (STOPWORDS.has(fn.toLowerCase())) return null;
+  if (!/[aeiouáéíóú]/i.test(fn)) return null;
+  if (!/^[a-záéíóúñü'-]+$/i.test(fn)) return null;
+  return fn;
+}
 
-Soy Kevin de Armatuprode. Te escribo porque arranca el Mundial en 48hs:
+type Segment = "SIN_GRUPO" | "CON_GRUPO";
 
-  ${FIRST_MATCH.teamA} vs ${FIRST_MATCH.teamB} — ${FIRST_MATCH.date}, ${FIRST_MATCH.time}
+const subjectFor = (name: string, seg: Segment) => {
+  const fn = safeFirstName(name);
+  if (seg === "SIN_GRUPO") {
+    return fn ? `${fn}, hoy arranca el Mundial` : `Hoy arranca el Mundial`;
+  }
+  return fn
+    ? `${fn}, cargá tu pronóstico antes del primer partido`
+    : `Cargá tu pronóstico antes del primer partido`;
+};
 
-Es el momento. Si todavía no armaste tu prode:
+const greet = (name: string, q: string) => {
+  const fn = safeFirstName(name);
+  if (fn) return `${fn}, ${q}`;
+  return q.replace(/^(¿?)([a-záéíóú])/, (_, p, c) => p + c.toUpperCase());
+};
 
-• Creá un grupo y pasale el link a tus amigos por WhatsApp
-• O metete a uno con un código que te hayan pasado
-• Cargá tus predicciones del primer partido antes del jueves
+const bodySinGrupo = (name: string) => `${greet(name, "¿qué hacés?")}
 
-Entrá a https://armatuprode.com.ar y en 2 minutos quedás dentro.
+Hoy arranca el Mundial con México vs Sudáfrica.
 
-Si algo no te funciona o tenés dudas, respondé este mail directo. Voy a estar atento mientras arranca todo.
+Si todavía no armaste tu grupo en Armatuprode, este es el momento:
 
-Gracias por jugar,
+→ Entrá a https://armatuprode.com.ar
+→ Creá tu grupo en menos de un minuto
+→ Pasale el link por WhatsApp a los del laburo, el fútbol o la familia
+
+Una vez que arranca el primer partido, ya no se puede cargar el pronóstico de ese encuentro.
+
+Y ojo: el martes 16 juega Argentina. Mejor llegar con el prode armado antes de que empiece la manija.
+
+Si algo no funciona o tenés alguna duda, respondeme este mail y te ayudo.
+
 Kevin`;
+
+const bodyConGrupo = (name: string) => `${greet(name, "¿cómo va?")}
+
+Hoy arranca el Mundial con México vs Sudáfrica.
+
+Ya estás dentro de un grupo en Armatuprode, así que solo te falta entrar y dejar cargado tu pronóstico antes de que empiece el partido:
+
+→ https://armatuprode.com.ar
+
+También podés aprovechar para pasarle el link del grupo a los que todavía faltan. El martes 16 juega Argentina y está bueno llegar con todos adentro antes de ese partido.
+
+Si algo no carga o tenés alguna duda, respondeme este mail y te ayudo.
+
+Kevin`;
+
+const bodyFor = (name: string, seg: Segment) =>
+  seg === "SIN_GRUPO" ? bodySinGrupo(name) : bodyConGrupo(name);
 
 const prisma = new PrismaClient();
 
@@ -59,6 +100,8 @@ async function main() {
   const live = args.has("--send");
   const testOnly = args.has("--test");
   const dryRun = !live && !testOnly;
+  const onlyNoGroup = args.has("--only-no-group");
+  const onlyWithGroup = args.has("--only-with-group");
 
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey && !dryRun) {
@@ -68,40 +111,73 @@ async function main() {
   const resend = apiKey ? new Resend(apiKey) : null;
 
   const users = await prisma.user.findMany({
-    select: { email: true, name: true, createdAt: true },
+    select: {
+      email: true,
+      name: true,
+      createdAt: true,
+      _count: { select: { memberships: true } },
+    },
     orderBy: { createdAt: "asc" },
   });
-  const queue = testOnly
-    ? [{ email: TEST_RECIPIENT, name: "Kevin (test)" }]
-    : users.filter((u) => !EXCLUDE_EMAILS.has(u.email));
 
-  console.log(`\nMode: ${dryRun ? "DRY-RUN" : testOnly ? "TEST" : "LIVE"}`);
-  console.log(`Recipients: ${queue.length}\n`);
-  if (dryRun && queue.length > 3) {
-    console.log("(mostrando solo el primero como muestra — los demás usan el mismo template)\n");
+  type Q = { email: string; name: string; segment: Segment };
+  let queue: Q[];
+
+  if (testOnly) {
+    queue = [
+      { email: TEST_RECIPIENT, name: "Kevin (sin grupo)", segment: "SIN_GRUPO" },
+      { email: TEST_RECIPIENT, name: "Kevin (con grupo)", segment: "CON_GRUPO" },
+    ];
+  } else {
+    queue = users
+      .filter((u) => !EXCLUDE_EMAILS.has(u.email))
+      .map<Q>((u) => ({
+        email: u.email,
+        name: u.name,
+        segment: u._count.memberships > 0 ? "CON_GRUPO" : "SIN_GRUPO",
+      }))
+      .filter((r) => {
+        if (onlyNoGroup) return r.segment === "SIN_GRUPO";
+        if (onlyWithGroup) return r.segment === "CON_GRUPO";
+        return true;
+      });
   }
 
-  for (const [i, u] of queue.entries()) {
-    const subject = subjectFor(u.name);
-    const text = bodyFor(u.name);
+  const noGroup = queue.filter((r) => r.segment === "SIN_GRUPO").length;
+  const withGroup = queue.filter((r) => r.segment === "CON_GRUPO").length;
 
-    if (dryRun) {
-      if (i < 3) {
-        console.log(`--- [${i + 1}/${queue.length}] ${u.email}  (${u.name}) ---`);
-        console.log(`Subject: ${subject}\n${text}\n`);
-      }
-      continue;
+  console.log(`\nMode: ${dryRun ? "DRY-RUN" : testOnly ? "TEST" : "LIVE"}`);
+  console.log(`Recipients: ${queue.length}  (sin grupo: ${noGroup} · con grupo: ${withGroup})\n`);
+
+  if (dryRun) {
+    const sample = (seg: Segment) => queue.find((r) => r.segment === seg);
+    const s1 = sample("SIN_GRUPO");
+    const s2 = sample("CON_GRUPO");
+    if (s1) {
+      console.log(`--- PREVIEW SIN_GRUPO → ${s1.email} (${s1.name}) ---`);
+      console.log(`Subject: ${subjectFor(s1.name, "SIN_GRUPO")}\n${bodyFor(s1.name, "SIN_GRUPO")}\n`);
     }
+    if (s2) {
+      console.log(`--- PREVIEW CON_GRUPO → ${s2.email} (${s2.name}) ---`);
+      console.log(`Subject: ${subjectFor(s2.name, "CON_GRUPO")}\n${bodyFor(s2.name, "CON_GRUPO")}\n`);
+    }
+    await prisma.$disconnect();
+    return;
+  }
+
+  for (const [i, r] of queue.entries()) {
+    const subject = subjectFor(r.name, r.segment);
+    const text = bodyFor(r.name, r.segment);
 
     try {
-      const result = await resend!.emails.send({ from: FROM, to: u.email, subject, text });
+      const result = await resend!.emails.send({ from: FROM, to: r.email, subject, text });
       if (result.error) {
-        console.error(`[${i + 1}/${queue.length}] FAIL ${u.email}:`, result.error);
+        console.error(`[${i + 1}/${queue.length}] FAIL ${r.email}:`, result.error);
       } else {
-        console.log(`[${i + 1}/${queue.length}] OK   ${u.email}  id=${result.data?.id}`);
+        console.log(`[${i + 1}/${queue.length}] OK   ${r.email}  [${r.segment}]  id=${result.data?.id}`);
       }
     } catch (e) {
-      console.error(`[${i + 1}/${queue.length}] ERR  ${u.email}:`, e);
+      console.error(`[${i + 1}/${queue.length}] ERR  ${r.email}:`, e);
     }
     if (i < queue.length - 1) await new Promise((res) => setTimeout(res, SEND_INTERVAL_MS));
   }
