@@ -163,6 +163,8 @@ export interface GroupDetail {
     inviteCode: string;
   };
   ranking: GroupDetailRanking[];
+  availableDates: string[];
+  selectedDate: string | null;
 }
 
 export interface RankingEntry {
@@ -306,16 +308,19 @@ export function useGroups() {
   return { groups, loading, error, refetch: fetchGroups };
 }
 
-export function useGroupDetail(id: string | null) {
+export function useGroupDetail(id: string | null, date?: string | null) {
   const { authFetch } = useApp();
   const [detail, setDetail] = useState<GroupDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchDetail = useCallback(async (groupId: string) => {
+  const fetchDetail = useCallback(async (groupId: string, filterDate?: string | null) => {
     try {
       setLoading(true);
-      const res = await authFetch(`/api/groups/${groupId}`);
+      const url = filterDate
+        ? `/api/groups/${groupId}?date=${encodeURIComponent(filterDate)}`
+        : `/api/groups/${groupId}`;
+      const res = await authFetch(url);
       if (!res.ok) throw new Error("Failed to fetch group detail");
       const data: GroupDetail = await res.json();
       setDetail(data);
@@ -329,13 +334,13 @@ export function useGroupDetail(id: string | null) {
 
   useEffect(() => {
     if (id) {
-      fetchDetail(id);
+      fetchDetail(id, date ?? null);
     } else {
       setDetail(null);
     }
-  }, [id, fetchDetail]);
+  }, [id, date, fetchDetail]);
 
-  return { detail, loading, error, refetch: () => id && fetchDetail(id) };
+  return { detail, loading, error, refetch: () => id && fetchDetail(id, date ?? null) };
 }
 
 export function useRanking() {

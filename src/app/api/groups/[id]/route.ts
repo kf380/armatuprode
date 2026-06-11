@@ -47,10 +47,26 @@ export async function GET(
   }
 
   const memberIds = group.members.map((m) => m.userId);
+
+  // Optional ?date=YYYY-MM-DD filter (AR calendar day, UTC-3).
+  // When present, ranking sums only points from matches finished that day.
+  const dateParam = request.nextUrl.searchParams.get("date");
+  const AR_OFFSET_MS = 3 * 60 * 60 * 1000;
+
+  let dayWindow: { gte: Date; lte: Date } | null = null;
+  if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+    const startUtc = new Date(`${dateParam}T03:00:00.000Z`);
+    const endUtc = new Date(startUtc.getTime() + 24 * 60 * 60 * 1000 - 1);
+    dayWindow = { gte: startUtc, lte: endUtc };
+  }
+
   const predictions = await prisma.prediction.findMany({
     where: {
       userId: { in: memberIds },
-      match: { tournamentId: group.tournamentId },
+      match: {
+        tournamentId: group.tournamentId,
+        ...(dayWindow ? { matchDate: dayWindow, status: "FINISHED" } : {}),
+      },
     },
     select: { userId: true, points: true },
   });
@@ -70,6 +86,20 @@ export async function GET(
       role: m.role,
     }))
     .sort((a, b) => b.points - a.points);
+
+  // Available dates = days (AR tz) with at least one finished match in the tournament.
+  // Frontend uses this to render the date selector.
+  const finishedMatches = await prisma.match.findMany({
+    where: { tournamentId: group.tournamentId, status: "FINISHED" },
+    select: { matchDate: true },
+    orderBy: { matchDate: "asc" },
+  });
+  const datesSet = new Set<string>();
+  for (const m of finishedMatches) {
+    const arIso = new Date(m.matchDate.getTime() - AR_OFFSET_MS).toISOString().slice(0, 10);
+    datesSet.add(arIso);
+  }
+  const availableDates = Array.from(datesSet).sort();
 
   // Resolve org role + member role + permissions for the requesting user.
   let orgRole: OrgMemberRole | null = null;
@@ -131,6 +161,8 @@ export async function GET(
       declaredPoolUpdatedAt: group.declaredPoolUpdatedAt?.toISOString() ?? null,
     },
     ranking,
+    availableDates,
+    selectedDate: dateParam && dayWindow ? dateParam : null,
     members,
     myRole: myMember?.role ?? null,
     myOrgRole: orgRole,

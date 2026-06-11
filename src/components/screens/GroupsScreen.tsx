@@ -37,7 +37,12 @@ export default function GroupsScreen() {
   const { config } = usePublicConfig();
   const realMoneyEnabled = config.flags.enableRealMoneyPools;
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
-  const { detail, loading: detailLoading } = useGroupDetail(selectedGroup);
+  const [rankingDate, setRankingDate] = useState<string | null>(null);
+  const { detail, loading: detailLoading } = useGroupDetail(selectedGroup, rankingDate);
+
+  useEffect(() => {
+    setRankingDate(null);
+  }, [selectedGroup]);
   const { events: activityEvents, loading: activityLoading, loadMore, hasMore } = useGroupActivity(selectedGroup);
   const [groupTab, setGroupTab] = useState<GroupTab>("ranking");
   const {
@@ -436,6 +441,40 @@ export default function GroupsScreen() {
 
         {/* Ranking view */}
         {groupTab === "ranking" && (
+          <>
+            {detail?.availableDates && detail.availableDates.length > 0 && (
+              <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
+                <button
+                  onClick={() => setRankingDate(null)}
+                  className={`shrink-0 rounded-full px-3 py-1 font-display text-[11px] font-bold tracking-wider transition-all ${
+                    rankingDate === null
+                      ? "bg-primary text-bg-primary"
+                      : "border border-border-default text-text-muted"
+                  }`}
+                >
+                  TOTAL
+                </button>
+                {detail.availableDates.map((d) => {
+                  const [, m, day] = d.split("-").map(Number);
+                  const months = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+                  const label = `${day} ${months[m - 1]}`;
+                  const active = rankingDate === d;
+                  return (
+                    <button
+                      key={d}
+                      onClick={() => setRankingDate(d)}
+                      className={`shrink-0 rounded-full px-3 py-1 font-display text-[11px] font-bold tracking-wider uppercase transition-all ${
+                        active
+                          ? "bg-primary text-bg-primary"
+                          : "border border-border-default text-text-muted"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           <motion.div className="space-y-1.5" variants={stagger} initial="hidden" animate="show">
             {ranking.map((player, i) => {
               const isUser = player.userId === dbUser?.id;
@@ -490,6 +529,7 @@ export default function GroupsScreen() {
               );
             })}
           </motion.div>
+          </>
         )}
 
         {/* Activity view */}
