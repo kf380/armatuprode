@@ -239,11 +239,14 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
     return generic ?? null;
   }, [apiMatches, liveMatches.length]);
 
-  // Is the upcoming banner showing an Argentina match? Switches color palette
-  // to celeste + blanco. Activates ~24h before kickoff.
+  // "Modo Argentina" para el banner: solo se activa cuando faltan <48h al
+  // partido. Antes de eso, el match Argentina aparece igual pero con copy y
+  // paleta normales (no queremos celeste/blanco 4 días antes).
   const isArgentinaUpcoming = useMemo(() => {
     if (!nextBigMatch) return false;
-    return isArgentinaMatch(nextBigMatch.m);
+    if (!isArgentinaMatch(nextBigMatch.m)) return false;
+    const hoursAway = (nextBigMatch.kickoff - Date.now()) / 3_600_000;
+    return hoursAway <= 48 && hoursAway > 0;
   }, [nextBigMatch]);
 
   const countdownLabel = useMemo(() => {
@@ -316,6 +319,18 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
   const nextMatch = matches.find(
     (m) => m.status === "upcoming" && new Date(m.matchDateIso).getTime() > now,
   );
+  // Los siguientes 5 después del nextMatch — alimenta el carrusel "Y después…".
+  const upcomingAfter = useMemo(() => {
+    if (!nextMatch) return [];
+    return matches
+      .filter(
+        (m) =>
+          m.status === "upcoming" &&
+          new Date(m.matchDateIso).getTime() > now &&
+          m.id !== nextMatch.id,
+      )
+      .slice(0, 5);
+  }, [matches, nextMatch, now]);
   const predictedCount = matches.filter((m) => m.status === "upcoming" && m.userPrediction).length;
   const totalUpcoming = matches.filter((m) => m.status === "upcoming").length;
 
@@ -499,6 +514,62 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
         </motion.div>
       )}
 
+      {/* Y después… — carrusel horizontal de los próximos partidos */}
+      {upcomingAfter.length > 0 && (
+        <motion.div variants={fadeUp} className="-mt-2">
+          <div className="flex items-center justify-between mb-2 px-1">
+            <span className="font-display text-[10px] tracking-widest text-text-muted">Y DESPUÉS</span>
+            <button
+              onClick={() => setActiveTab("matches")}
+              className="text-[10px] text-text-muted hover:text-primary"
+            >
+              Ver todos
+            </button>
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 snap-x">
+            {upcomingAfter.map((m) => {
+              const arDay = new Date(m.matchDateIso).toLocaleString("es-AR", {
+                timeZone: "America/Argentina/Buenos_Aires",
+                weekday: "short",
+                day: "numeric",
+                month: "short",
+              });
+              const isArg = isArgentinaMatch(m);
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => setActiveTab("matches")}
+                  className={`shrink-0 snap-start min-w-[150px] rounded-xl border p-3 text-left transition-all active:scale-[0.98] ${
+                    isArg
+                      ? "border-[#74ACDF]/40 bg-[#74ACDF]/5 hover:border-[#74ACDF]/60"
+                      : "border-border-default bg-bg-surface hover:border-primary/30"
+                  }`}
+                >
+                  <div className="text-[9px] font-display tracking-widest text-text-muted mb-1.5">
+                    {arDay} · {m.time}hs
+                  </div>
+                  <div className="text-sm font-bold flex items-center gap-1 mb-0.5 truncate">
+                    <span>{m.teamA.flag}</span>
+                    <span className="truncate">{m.teamA.code}</span>
+                  </div>
+                  <div className="text-sm font-bold flex items-center gap-1 truncate">
+                    <span>{m.teamB.flag}</span>
+                    <span className="truncate">{m.teamB.code}</span>
+                  </div>
+                  {m.userPrediction ? (
+                    <div className="mt-1.5 text-[10px] text-primary font-bold">
+                      {m.userPrediction.scoreA}–{m.userPrediction.scoreB} ✓
+                    </div>
+                  ) : (
+                    <div className="mt-1.5 text-[10px] text-accent">Pendiente</div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </motion.div>
+      )}
+
       {/* Quick Stats */}
       <motion.div variants={fadeUp} className="grid grid-cols-3 gap-3 md:gap-4">
         <button
@@ -649,7 +720,7 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
                 className="font-display text-[10px] font-bold tracking-widest"
                 style={{ color: isArgentinaUpcoming ? ARGENTINA_COLORS.celeste : undefined }}
               >
-                {isArgentinaUpcoming ? "HOY/PRONTO JUEGA ARGENTINA" : "PRÓXIMO PARTIDO"}
+                {isArgentinaUpcoming ? "ARGENTINA SE VIENE" : "PRÓXIMO PARTIDO"}
               </div>
               <div className="text-sm font-bold mt-0.5">
                 {nextBigMatch.m.teamA.flag} {nextBigMatch.m.teamA.code} vs {nextBigMatch.m.teamB.code} {nextBigMatch.m.teamB.flag}
