@@ -9,6 +9,7 @@ import { useDashboard, useLiveMatches, deriveLevel, usePublicConfig } from "@/li
 import type { ScreenMatch } from "@/lib/hooks";
 import { isArgentinaMatch, findNextArgentina, ARGENTINA_COLORS } from "@/lib/argentina-mode";
 import PullToRefresh from "@/components/PullToRefresh";
+import AnimatedNumber from "@/components/AnimatedNumber";
 import { calculatePoints } from "@/lib/scoring";
 // Mock fallbacks removed: only `currentUser` is kept as a default-shape source while the
 // real user is loading. Matches/groups must come from the API — never show fakes in prod.
@@ -209,6 +210,47 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
     }
   }, [apiMatches]);
 
+  // Level-up celebration: detecta cuando user.level subió desde el último mount
+  // (persiste en localStorage) y dispara overlay + confetti + sonido.
+  const [levelUpFrom, setLevelUpFrom] = useState<{ from: number; to: number } | null>(null);
+  useEffect(() => {
+    if (!dbUser) return;
+    const currentLevel = deriveLevel(dbUser.xp).level;
+    const seenKey = "ap_seen_level_v1";
+    const lastSeen = typeof window !== "undefined" ? parseInt(window.localStorage.getItem(seenKey) || "0", 10) : 0;
+    if (lastSeen > 0 && currentLevel > lastSeen) {
+      setLevelUpFrom({ from: lastSeen, to: currentLevel });
+      void import("canvas-confetti").then(({ default: confetti }) => {
+        confetti({ particleCount: 160, spread: 90, origin: { y: 0.5 }, colors: ["#F5B82E", "#10B981", "#FAFAF7"] });
+      }).catch(() => {});
+      void import("@/lib/sound-fx").then((m) => m.playWinFanfare()).catch(() => {});
+      void import("@/lib/haptics").then((h) => h.tapCelebrate()).catch(() => {});
+      setTimeout(() => setLevelUpFrom(null), 3000);
+    }
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(seenKey, String(currentLevel));
+    }
+  }, [dbUser]);
+
+  // "Te pasó X" — detecta cuando alguien subió por encima tuyo en el ranking.
+  // Persiste tu última rank vista; si la nueva es peor (número mayor), surface
+  // el toast con quién es el rival más cercano arriba tuyo.
+  const [overtakenToast, setOvertakenToast] = useState<string | null>(null);
+  useEffect(() => {
+    if (!stats || stats.globalRank == null) return;
+    const seenKey = "ap_seen_rank_v1";
+    const lastSeen = typeof window !== "undefined" ? parseInt(window.localStorage.getItem(seenKey) || "0", 10) : 0;
+    if (lastSeen > 0 && stats.globalRank > lastSeen) {
+      const places = stats.globalRank - lastSeen;
+      setOvertakenToast(`🐔 Te pasaron ${places} ${places === 1 ? "lugar" : "lugares"} en el ranking`);
+      void import("@/lib/haptics").then((h) => h.tapLight()).catch(() => {});
+      setTimeout(() => setOvertakenToast(null), 4000);
+    }
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(seenKey, String(stats.globalRank));
+    }
+  }, [stats]);
+
   // Detectar cambio de score en live matches → disparar sonido GOL automático
   // (respeta el toggle Sounds OFF/ON del Profile) + vibración celebrate.
   const prevLiveScoresRef = useRef<Record<string, string>>({});
@@ -358,6 +400,48 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
 
   return (
     <PullToRefresh onRefresh={handlePullRefresh}>
+    {/* Level-up overlay */}
+    <AnimatePresence>
+      {levelUpFrom && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[75] flex items-center justify-center pointer-events-none"
+          style={{ background: "radial-gradient(circle at center, rgba(245,184,46,0.25) 0%, transparent 60%)" }}
+        >
+          <motion.div
+            initial={{ scale: 0.6, y: 30 }}
+            animate={{ scale: 1, y: 0 }}
+            transition={{ type: "spring", damping: 14, stiffness: 200 }}
+            className="text-center"
+          >
+            <div className="text-6xl mb-2">🎖️</div>
+            <div className="font-display text-[10px] tracking-[0.3em] text-accent">SUBISTE A</div>
+            <div className="font-display font-black text-accent" style={{ fontSize: "clamp(48px, 12vw, 96px)", letterSpacing: "-0.02em", textShadow: "0 0 30px rgba(245,184,46,0.6)" }}>
+              NIVEL {levelUpFrom.to}
+            </div>
+            <div className="text-xs text-text-secondary mt-1">{deriveLevel((dbUser?.xp ?? 0)).levelName}</div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+
+    {/* Te pasaron toast */}
+    <AnimatePresence>
+      {overtakenToast && (
+        <motion.div
+          initial={{ y: -40, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: -40, opacity: 0 }}
+          transition={{ type: "spring", damping: 20 }}
+          className="fixed left-1/2 -translate-x-1/2 top-[calc(0.75rem+env(safe-area-inset-top))] z-[70] max-w-[90vw] rounded-full border border-amber-500/40 bg-bg-surface px-4 py-2 text-xs text-text-primary shadow-2xl"
+        >
+          {overtakenToast}
+        </motion.div>
+      )}
+    </AnimatePresence>
+
     {/* GOOOOOL full-screen overlay para Argentina + exacto */}
     <AnimatePresence>
       {argentinaGoooolFor && (
@@ -603,7 +687,11 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
             className="font-display font-black leading-none text-secondary"
             style={{ fontSize: "clamp(40px, 11vw, 56px)", letterSpacing: "-0.02em" }}
           >
-            {user.globalRank != null ? user.globalRank : (user.statsLoaded ? "—" : "…")}
+            {user.globalRank != null ? (
+              <AnimatedNumber value={user.globalRank} />
+            ) : (
+              <span>{user.statsLoaded ? "—" : "…"}</span>
+            )}
           </div>
           <div className="text-[9px] text-text-muted mt-2 font-display tracking-[0.2em]">POSICIÓN</div>
         </button>
@@ -613,7 +701,11 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
             className="font-display font-black leading-none text-accent"
             style={{ fontSize: "clamp(40px, 11vw, 56px)", letterSpacing: "-0.02em" }}
           >
-            {user.precision != null ? user.precision : (user.statsLoaded ? "—" : "…")}
+            {user.precision != null ? (
+              <AnimatedNumber value={user.precision} />
+            ) : (
+              <span>{user.statsLoaded ? "—" : "…"}</span>
+            )}
           </div>
           <div className="text-[9px] text-text-muted mt-2 font-display tracking-[0.2em]">PRECISIÓN</div>
         </div>
@@ -623,7 +715,7 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
             className="font-display font-black leading-none text-text-primary"
             style={{ fontSize: "clamp(40px, 11vw, 56px)", letterSpacing: "-0.02em" }}
           >
-            {user.statsLoaded ? user.exactos : "…"}
+            {user.statsLoaded ? <AnimatedNumber value={user.exactos} /> : <span>…</span>}
           </div>
           <div className="text-[9px] text-text-muted mt-2 font-display tracking-[0.2em]">EXACTOS</div>
         </div>

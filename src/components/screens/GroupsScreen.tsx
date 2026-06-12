@@ -628,7 +628,7 @@ export default function GroupsScreen() {
               : `${top.name.split(" ")[0]} te saca ${Math.abs(top.diff)} pts`;
             const last5label = top.youWonLast5 + top.theyWonLast5 + top.tieLast5 > 0
               ? `Últimas 5: ${balance}`
-              : "Sin head-to-head todavía";
+              : "Cuando los dos pronostiquen un mismo partido terminado, aparece la comparación";
             return (
               <div className={`rounded-2xl border p-3 mt-2 flex items-center gap-3 ${
                 youAhead ? "border-primary/30 bg-primary/5" : top.diff === 0 ? "border-border-default bg-bg-surface/60" : "border-amber-500/30 bg-amber-500/5"
