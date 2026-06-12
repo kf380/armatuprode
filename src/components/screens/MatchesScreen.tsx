@@ -570,17 +570,19 @@ export default function MatchesScreen() {
                     return (
                       <>
                         <div className="flex items-center justify-between gap-2">
-                          {/* Team A — flag + code + +/- */}
-                          <div className="flex-1 flex flex-col items-center gap-2">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-2xl">{match.teamA.flag}</span>
-                              <div className="font-display text-xs font-bold tracking-wider">{match.teamA.code}</div>
+                          {/* Team A — flag + nombre + +/- */}
+                          <div className="flex-1 flex flex-col items-center gap-2 min-w-0">
+                            <div className="flex flex-col items-center gap-0.5 w-full">
+                              <span className="text-2xl leading-none">{match.teamA.flag}</span>
+                              <div className="font-display text-[11px] font-bold text-center leading-tight truncate w-full px-1">
+                                {match.teamA.name}
+                              </div>
                             </div>
                             <div className="flex items-center gap-2">
                               <button
                                 onClick={() => handleQuickChange(match.id, Math.max(0, currentA - 1), currentB)}
                                 className="h-8 w-8 rounded-full border border-border-default bg-bg-primary flex items-center justify-center text-text-secondary hover:border-primary/40 active:scale-95"
-                                aria-label="Bajar gol Team A"
+                                aria-label={`Bajar gol ${match.teamA.name}`}
                               >
                                 <Minus size={14} />
                               </button>
@@ -588,7 +590,7 @@ export default function MatchesScreen() {
                               <button
                                 onClick={() => handleQuickChange(match.id, Math.min(15, currentA + 1), currentB)}
                                 className="h-8 w-8 rounded-full border border-border-default bg-bg-primary flex items-center justify-center text-text-secondary hover:border-primary/40 active:scale-95"
-                                aria-label="Subir gol Team A"
+                                aria-label={`Subir gol ${match.teamA.name}`}
                               >
                                 <Plus size={14} />
                               </button>
@@ -596,7 +598,7 @@ export default function MatchesScreen() {
                           </div>
 
                           {/* Status + VS center */}
-                          <div className="flex flex-col items-center gap-1.5 px-1">
+                          <div className="flex flex-col items-center gap-1.5 px-1 shrink-0">
                             <div className="font-display text-[10px] text-text-muted tracking-widest">VS</div>
                             <div className="h-5">
                               {status === "saving" && <Loader2 size={14} className="animate-spin text-text-muted" />}
@@ -605,16 +607,18 @@ export default function MatchesScreen() {
                           </div>
 
                           {/* Team B */}
-                          <div className="flex-1 flex flex-col items-center gap-2">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-2xl">{match.teamB.flag}</span>
-                              <div className="font-display text-xs font-bold tracking-wider">{match.teamB.code}</div>
+                          <div className="flex-1 flex flex-col items-center gap-2 min-w-0">
+                            <div className="flex flex-col items-center gap-0.5 w-full">
+                              <span className="text-2xl leading-none">{match.teamB.flag}</span>
+                              <div className="font-display text-[11px] font-bold text-center leading-tight truncate w-full px-1">
+                                {match.teamB.name}
+                              </div>
                             </div>
                             <div className="flex items-center gap-2">
                               <button
                                 onClick={() => handleQuickChange(match.id, currentA, Math.max(0, currentB - 1))}
                                 className="h-8 w-8 rounded-full border border-border-default bg-bg-primary flex items-center justify-center text-text-secondary hover:border-primary/40 active:scale-95"
-                                aria-label="Bajar gol Team B"
+                                aria-label={`Bajar gol ${match.teamB.name}`}
                               >
                                 <Minus size={14} />
                               </button>
@@ -622,7 +626,7 @@ export default function MatchesScreen() {
                               <button
                                 onClick={() => handleQuickChange(match.id, currentA, Math.min(15, currentB + 1))}
                                 className="h-8 w-8 rounded-full border border-border-default bg-bg-primary flex items-center justify-center text-text-secondary hover:border-primary/40 active:scale-95"
-                                aria-label="Subir gol Team B"
+                                aria-label={`Subir gol ${match.teamB.name}`}
                               >
                                 <Plus size={14} />
                               </button>
