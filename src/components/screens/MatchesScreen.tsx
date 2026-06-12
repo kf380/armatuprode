@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, AlertTriangle, Minus, Plus, X, Sparkles, Loader2, CalendarX, Search } from "lucide-react";
 import { useApp } from "@/lib/store";
@@ -85,6 +85,63 @@ export default function MatchesScreen() {
   const [savedAnimation, setSavedAnimation] = useState<string | null>(null);
   const [sharePrompt, setSharePrompt] = useState<string | null>(null);
   const [lockedToast, setLockedToast] = useState<string | null>(null);
+
+  // Quick-pick inline: debounced autosave por match. Estado por matchId con
+  // 'saving' (POST en curso) y 'saved' (success, fade out).
+  type QuickStatus = "idle" | "saving" | "saved";
+  const [quickStatus, setQuickStatus] = useState<Record<string, QuickStatus>>({});
+  const quickTimerRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const quickSavedTimerRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  const submitQuick = async (matchId: string, scoreA: number, scoreB: number) => {
+    setQuickStatus((s) => ({ ...s, [matchId]: "saving" }));
+    try {
+      const res = await authFetch("/api/predictions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ matchId, scoreA, scoreB }),
+      });
+      if (!res.ok) throw new Error("save failed");
+      setQuickStatus((s) => ({ ...s, [matchId]: "saved" }));
+      void import("@/lib/sound-fx").then((m) => m.playPickConfirm()).catch(() => {});
+      // Fade el "saved" después de 1.6s
+      if (quickSavedTimerRef.current[matchId]) clearTimeout(quickSavedTimerRef.current[matchId]);
+      quickSavedTimerRef.current[matchId] = setTimeout(() => {
+        setQuickStatus((s) => ({ ...s, [matchId]: "idle" }));
+      }, 1600);
+    } catch {
+      setQuickStatus((s) => ({ ...s, [matchId]: "idle" }));
+      setLockedToast("No pude guardar el pronóstico. Reintentá en un segundo.");
+    }
+  };
+
+  const handleQuickChange = (matchId: string, scoreA: number, scoreB: number) => {
+    // Optimistic UI: actualizo el state local inmediatamente
+    setPredictions((prev) => ({
+      ...prev,
+      [matchId]: {
+        matchId,
+        scoreA,
+        scoreB,
+        predictedQualifier: prev[matchId]?.predictedQualifier ?? null,
+      },
+    }));
+    // Debounce 800ms: el último click después de 800ms quietos dispara el save
+    if (quickTimerRef.current[matchId]) clearTimeout(quickTimerRef.current[matchId]);
+    quickTimerRef.current[matchId] = setTimeout(() => {
+      submitQuick(matchId, scoreA, scoreB);
+    }, 800);
+  };
+
+  // Cleanup timers on unmount.
+  useEffect(() => {
+    const timers = quickTimerRef.current;
+    const savedTimers = quickSavedTimerRef.current;
+    return () => {
+      Object.values(timers).forEach(clearTimeout);
+      Object.values(savedTimers).forEach(clearTimeout);
+    };
+  }, []);
 
   // Auto-clear the "match arrancó" toast after 3s.
   useEffect(() => {
@@ -501,51 +558,123 @@ export default function MatchesScreen() {
                   )}
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 flex-1">
-                    <span className="text-2xl">{match.teamA.flag}</span>
-                    <div>
-                      <div className="font-display text-sm font-bold">{match.teamA.code}</div>
-                      <div className="text-[10px] text-text-muted">{match.teamA.name}</div>
-                    </div>
-                  </div>
+                {(() => {
+                  const kickedOff = new Date(match.matchDateIso).getTime() <= Date.now();
+                  const locked = kickedOff || match.status !== "upcoming";
+                  const canQuickPick = !locked && match.phase === "GROUP_STAGE";
+                  const currentA = pred?.scoreA ?? 0;
+                  const currentB = pred?.scoreB ?? 0;
+                  const status = quickStatus[match.id] ?? "idle";
 
-                  {hasPred && pred ? (
-                    <button
-                      onClick={() => openPredict(match.id)}
-                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-bg-primary border border-border-default"
-                    >
-                      <span className="font-display text-lg font-bold text-primary">
-                        {pred.scoreA}
-                      </span>
-                      <span className="text-text-muted text-xs">-</span>
-                      <span className="font-display text-lg font-bold text-primary">
-                        {pred.scoreB}
-                      </span>
-                    </button>
-                  ) : (
-                    <span className="font-display text-sm text-text-muted tracking-widest px-3">
-                      VS
-                    </span>
-                  )}
+                  if (canQuickPick) {
+                    return (
+                      <>
+                        <div className="flex items-center justify-between gap-2">
+                          {/* Team A — flag + code + +/- */}
+                          <div className="flex-1 flex flex-col items-center gap-2">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-2xl">{match.teamA.flag}</span>
+                              <div className="font-display text-xs font-bold tracking-wider">{match.teamA.code}</div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleQuickChange(match.id, Math.max(0, currentA - 1), currentB)}
+                                className="h-8 w-8 rounded-full border border-border-default bg-bg-primary flex items-center justify-center text-text-secondary hover:border-primary/40 active:scale-95"
+                                aria-label="Bajar gol Team A"
+                              >
+                                <Minus size={14} />
+                              </button>
+                              <span className="font-display text-2xl font-bold text-primary w-7 text-center">{currentA}</span>
+                              <button
+                                onClick={() => handleQuickChange(match.id, Math.min(15, currentA + 1), currentB)}
+                                className="h-8 w-8 rounded-full border border-border-default bg-bg-primary flex items-center justify-center text-text-secondary hover:border-primary/40 active:scale-95"
+                                aria-label="Subir gol Team A"
+                              >
+                                <Plus size={14} />
+                              </button>
+                            </div>
+                          </div>
 
-                  <div className="flex items-center gap-2 flex-1 justify-end">
-                    <div className="text-right">
-                      <div className="font-display text-sm font-bold">{match.teamB.code}</div>
-                      <div className="text-[10px] text-text-muted">{match.teamB.name}</div>
-                    </div>
-                    <span className="text-2xl">{match.teamB.flag}</span>
-                  </div>
-                </div>
+                          {/* Status + VS center */}
+                          <div className="flex flex-col items-center gap-1.5 px-1">
+                            <div className="font-display text-[10px] text-text-muted tracking-widest">VS</div>
+                            <div className="h-5">
+                              {status === "saving" && <Loader2 size={14} className="animate-spin text-text-muted" />}
+                              {status === "saved" && <Check size={14} className="text-primary" />}
+                            </div>
+                          </div>
 
-                {!hasPred && (
-                  <button
-                    onClick={() => openPredict(match.id)}
-                    className="mt-3 w-full rounded-lg border border-primary/30 bg-primary/10 py-2 font-display text-xs font-bold tracking-widest text-primary transition-all hover:bg-primary/20 active:scale-[0.98]"
-                  >
-                    PREDECIR
-                  </button>
-                )}
+                          {/* Team B */}
+                          <div className="flex-1 flex flex-col items-center gap-2">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-2xl">{match.teamB.flag}</span>
+                              <div className="font-display text-xs font-bold tracking-wider">{match.teamB.code}</div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleQuickChange(match.id, currentA, Math.max(0, currentB - 1))}
+                                className="h-8 w-8 rounded-full border border-border-default bg-bg-primary flex items-center justify-center text-text-secondary hover:border-primary/40 active:scale-95"
+                                aria-label="Bajar gol Team B"
+                              >
+                                <Minus size={14} />
+                              </button>
+                              <span className="font-display text-2xl font-bold text-primary w-7 text-center">{currentB}</span>
+                              <button
+                                onClick={() => handleQuickChange(match.id, currentA, Math.min(15, currentB + 1))}
+                                className="h-8 w-8 rounded-full border border-border-default bg-bg-primary flex items-center justify-center text-text-secondary hover:border-primary/40 active:scale-95"
+                                aria-label="Subir gol Team B"
+                              >
+                                <Plus size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  }
+
+                  // Knockout o partido bloqueado → modal completo
+                  return (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 flex-1">
+                          <span className="text-2xl">{match.teamA.flag}</span>
+                          <div>
+                            <div className="font-display text-sm font-bold">{match.teamA.code}</div>
+                            <div className="text-[10px] text-text-muted">{match.teamA.name}</div>
+                          </div>
+                        </div>
+                        {hasPred && pred ? (
+                          <button
+                            onClick={() => openPredict(match.id)}
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-bg-primary border border-border-default"
+                          >
+                            <span className="font-display text-lg font-bold text-primary">{pred.scoreA}</span>
+                            <span className="text-text-muted text-xs">-</span>
+                            <span className="font-display text-lg font-bold text-primary">{pred.scoreB}</span>
+                          </button>
+                        ) : (
+                          <span className="font-display text-sm text-text-muted tracking-widest px-3">VS</span>
+                        )}
+                        <div className="flex items-center gap-2 flex-1 justify-end">
+                          <div className="text-right">
+                            <div className="font-display text-sm font-bold">{match.teamB.code}</div>
+                            <div className="text-[10px] text-text-muted">{match.teamB.name}</div>
+                          </div>
+                          <span className="text-2xl">{match.teamB.flag}</span>
+                        </div>
+                      </div>
+                      {!hasPred && !locked && (
+                        <button
+                          onClick={() => openPredict(match.id)}
+                          className="mt-3 w-full rounded-lg border border-primary/30 bg-primary/10 py-2 font-display text-xs font-bold tracking-widest text-primary transition-all hover:bg-primary/20 active:scale-[0.98]"
+                        >
+                          {match.phase === "GROUP_STAGE" ? "PREDECIR" : "PREDECIR + CLASIFICADO"}
+                        </button>
+                      )}
+                    </>
+                  );
+                })()}
 
                 {/* Share prompt after saving */}
                 {showSharePrompt && hasPred && pred && (
