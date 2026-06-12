@@ -6,6 +6,7 @@ import { ChevronRight, Plus, Zap, TrendingUp, Target, Bell, ShoppingBag, Radio, 
 import XPBar from "@/components/XPBar";
 import { useApp } from "@/lib/store";
 import { useMatches, useGroups, useUserStats, useLiveMatches, deriveLevel, usePlayerPremium, usePublicConfig } from "@/lib/hooks";
+import { calculatePoints } from "@/lib/scoring";
 import { Crown } from "lucide-react";
 // Mock fallbacks removed: only `currentUser` is kept as a default-shape source while the
 // real user is loading. Matches/groups must come from the API — never show fakes in prod.
@@ -433,6 +434,33 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
                   {lm.teamBCode} {lm.teamBFlag}
                   {lm.minute != null && <span className="text-danger ml-2 text-xs">{lm.minute}&apos;</span>}
                 </div>
+                {(() => {
+                  const myMatch = apiMatches.find((m) => m.id === lm.id);
+                  const pred = myMatch?.userPrediction;
+                  if (!pred) return null;
+                  const liveProjected = calculatePoints(
+                    pred.scoreA,
+                    pred.scoreB,
+                    lm.scoreA ?? 0,
+                    lm.scoreB ?? 0,
+                    myMatch?.phase,
+                    pred.predictedQualifier ?? null,
+                    null,
+                  );
+                  if (liveProjected === 0) {
+                    return (
+                      <div className="text-[10px] text-text-muted mt-1">
+                        Tu pronóstico: {pred.scoreA}-{pred.scoreB} · si queda así no sumás
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="text-[10px] mt-1">
+                      <span className="text-text-muted">Tu pronóstico: {pred.scoreA}-{pred.scoreB} · </span>
+                      <span className="text-primary font-bold">si queda así ganás +{liveProjected} pts</span>
+                    </div>
+                  );
+                })()}
               </div>
               <div className="text-xs text-text-muted">
                 Ver <ChevronRight size={14} className="inline" />
