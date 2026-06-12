@@ -77,11 +77,9 @@ export async function GET(request: NextRequest) {
       where: { match: { tournamentId: tournament.id } },
       _sum: { points: true },
     }),
-    prisma.user.findUnique({
-      where: { id: dbUser.id },
-      select: {
-        badges: { select: { badgeId: true, earnedAt: true } },
-      },
+    prisma.userBadge.findMany({
+      where: { userId: dbUser.id },
+      select: { badgeId: true, earnedAt: true },
     }),
     prisma.groupMember.findMany({
       where: { userId: dbUser.id },
@@ -191,6 +189,6 @@ export async function GET(request: NextRequest) {
       inviteCode: m.group.inviteCode,
       memberCount: m.group._count.members,
     })),
-    badges: (badges?.badges ?? []).map((b) => ({ id: b.badgeId, earnedAt: b.earnedAt.toISOString() })),
+    badges: badges.map((b) => ({ id: b.badgeId, earnedAt: b.earnedAt.toISOString() })),
   });
 }
