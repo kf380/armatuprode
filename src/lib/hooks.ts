@@ -910,7 +910,6 @@ export interface PublicConfig {
     enableOrganizationPlans: boolean;
     enablePlayerPayments: boolean;
     enableManualPools: boolean;
-    enablePlayerPremium: boolean;
   };
   limits: {
     maxPoolParticipants: number;
@@ -930,7 +929,6 @@ const DEFAULT_CONFIG: PublicConfig = {
     enableOrganizationPlans: true,
     enablePlayerPayments: false,
     enableManualPools: false,
-    enablePlayerPremium: false,
   },
   limits: { maxPoolParticipants: 50, maxEntryFee: 20000 },
 };
@@ -1359,64 +1357,6 @@ export function usePoolTracking(groupId: string | null) {
     refetch: () => groupId && fetchTracking(groupId),
     setPaid,
   };
-}
-
-export interface ApiPremiumMembership {
-  tournamentId: string;
-  tournamentName: string;
-  paidAt: string;
-  validUntil: string;
-  amountUsd: number;
-}
-
-export function usePlayerPremium() {
-  const { authFetch } = useApp();
-  const [isPremium, setIsPremium] = useState(false);
-  const [memberships, setMemberships] = useState<ApiPremiumMembership[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const fetch = useCallback(async () => {
-    try {
-      setLoading(true);
-      const res = await authFetch("/api/users/premium");
-      if (!res.ok) {
-        setIsPremium(false);
-        setMemberships([]);
-        return;
-      }
-      const data = await res.json();
-      setIsPremium(data.isPremium ?? false);
-      setMemberships(data.memberships ?? []);
-    } finally {
-      setLoading(false);
-    }
-  }, [authFetch]);
-
-  useEffect(() => {
-    fetch();
-  }, [fetch]);
-
-  return { isPremium, memberships, loading, refetch: fetch };
-}
-
-export function useBuyPlayerPremium() {
-  const { authFetch } = useApp();
-
-  const buy = useCallback(
-    async (tournamentId: string) => {
-      const res = await authFetch("/api/payments/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "player_premium", tournamentId }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "No se pudo iniciar el pago");
-      return data as { initPoint: string; orderId: string };
-    },
-    [authFetch],
-  );
-
-  return { buy };
 }
 
 export function useResumeGroupPayment() {

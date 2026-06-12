@@ -5,10 +5,9 @@ import { motion } from "framer-motion";
 import { ChevronRight, Plus, Zap, TrendingUp, Target, Bell, ShoppingBag, Radio, Coins, Loader2, CalendarClock } from "lucide-react";
 import XPBar from "@/components/XPBar";
 import { useApp } from "@/lib/store";
-import { useMatches, useGroups, useUserStats, useLiveMatches, useUserBadges, deriveLevel, usePlayerPremium, usePublicConfig } from "@/lib/hooks";
+import { useMatches, useGroups, useUserStats, useLiveMatches, useUserBadges, deriveLevel, usePublicConfig } from "@/lib/hooks";
 import PullToRefresh from "@/components/PullToRefresh";
 import { calculatePoints } from "@/lib/scoring";
-import { Crown } from "lucide-react";
 // Mock fallbacks removed: only `currentUser` is kept as a default-shape source while the
 // real user is loading. Matches/groups must come from the API — never show fakes in prod.
 import { currentUser as mockUser } from "@/lib/mock-data";
@@ -25,7 +24,6 @@ const fadeUp = {
 export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, data?: Record<string, string>) => void }) {
   const { setScreen, unreadCount, coins, dbUser, setLiveMatchId, setActiveTab, authFetch } = useApp();
   const { config } = usePublicConfig();
-  const { isPremium } = usePlayerPremium();
   const pushPromptedRef = useRef(false);
 
   // Prompt for push notifications on first load
@@ -244,30 +242,6 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
           </button>
         </div>
       </motion.div>
-
-      {/* Premium banner — only when feature flag is on AND user is not yet premium */}
-      {config?.flags.enablePlayerPremium && !isPremium && (
-        <motion.a
-          href="/premium"
-          variants={fadeUp}
-          className="block rounded-2xl border border-accent/30 bg-gradient-to-r from-accent/10 to-primary/10 p-4"
-        >
-          <div className="flex items-center gap-3">
-            <div className="size-10 shrink-0 rounded-xl bg-accent/20 border border-accent/40 flex items-center justify-center">
-              <Crown size={18} className="text-accent" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="font-display text-xs font-bold tracking-wider text-accent mb-0.5">
-                ARMATUPRODE PREMIUM
-              </div>
-              <div className="text-[11px] text-text-secondary">
-                Insights, stats y comodines · USD 2 por torneo
-              </div>
-            </div>
-            <ChevronRight size={16} className="text-accent shrink-0" />
-          </div>
-        </motion.a>
-      )}
 
       {/* XP Bar */}
       <motion.div variants={fadeUp} className="rounded-2xl border border-border-default bg-bg-surface p-4">

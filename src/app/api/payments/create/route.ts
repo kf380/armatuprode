@@ -6,7 +6,7 @@ import { rateLimit } from "@/lib/ratelimit";
 import { flags, canPlayersBeCharged } from "@/lib/flags";
 import { limits } from "@/lib/limits";
 import { log } from "@/lib/log";
-import { PLANS, isPublicPlan, priceFor, priceForPool, priceForPlayerPremium } from "@/lib/plans";
+import { PLANS, isPublicPlan, priceFor, priceForPool } from "@/lib/plans";
 import type { PaymentType, PlanType } from "@prisma/client";
 
 const COIN_PACKS: Record<string, { coins: number; price: number }> = {
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json();
   const { type, packId, groupId, planType: rawPlan, estimatedPlayers, tournamentId } = body as {
-    type: "coin_pack" | "pool_entry" | "group_activation" | "player_premium";
+    type: "coin_pack" | "pool_entry" | "group_activation";
     packId?: string;
     groupId?: string;
     planType?: PlanType;
@@ -207,47 +207,6 @@ export async function POST(request: NextRequest) {
       ...(declaredPoolTotal !== null ? { declaredPoolTotal } : {}),
     };
     paymentType = "GROUP_ACTIVATION";
-  } else if (type === "player_premium") {
-    // Phase 2c: B2C paywall — player buys premium for a tournament.
-    // Gated by ENABLE_PLAYER_PREMIUM. Idempotent: if already active, refuse.
-    if (!flags.enablePlayerPremium()) {
-      return NextResponse.json(
-        { error: "Premium para jugadores no está disponible" },
-        { status: 403 },
-      );
-    }
-    if (!tournamentId || typeof tournamentId !== "string") {
-      return NextResponse.json({ error: "tournamentId requerido" }, { status: 400 });
-    }
-    const tournament = await prisma.tournament.findUnique({ where: { id: tournamentId } });
-    if (!tournament) {
-      return NextResponse.json({ error: "Torneo no encontrado" }, { status: 404 });
-    }
-    // Block double-buy: if user already has an active membership for this
-    // tournament, return 409 with the existing membership info.
-    const existing = await prisma.premiumMembership.findUnique({
-      where: { userId_tournamentId: { userId: dbUser.id, tournamentId } },
-    });
-    if (existing && existing.validUntil > new Date()) {
-      return NextResponse.json(
-        {
-          error: "Ya tenés Premium activo para este torneo",
-          validUntil: existing.validUntil.toISOString(),
-        },
-        { status: 409 },
-      );
-    }
-
-    const quote = priceForPlayerPremium();
-    title = `Premium ${tournament.name} - ArmatuProde`;
-    unitPrice = quote.amountArs;
-    metadata = {
-      tournamentId,
-      amountUsd: quote.amountUsd,
-      arsRate: quote.arsRate,
-      ownerId: dbUser.id,
-    };
-    paymentType = "PLAYER_PREMIUM";
   } else {
     return NextResponse.json({ error: "Tipo inválido" }, { status: 400 });
   }

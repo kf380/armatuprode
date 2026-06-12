@@ -20,7 +20,6 @@ export async function GET() {
       enableOrganizationPlans: flags.enableOrganizationPlans(),
       enablePlayerPayments: flags.enablePlayerPayments(),
       enableManualPools: flags.enableManualPools(),
-      enablePlayerPremium: flags.enablePlayerPremium(),
     },
     limits: {
       maxPoolParticipants: limits.maxPoolParticipants(),

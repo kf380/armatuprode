@@ -61,14 +61,6 @@ export const flags = {
    * Sprint 2.
    */
   enableManualPools: () => envBool("ENABLE_MANUAL_POOLS", false),
-
-  // --- Phase 2c: Player Premium (B2C paywall voluntario) ---
-  /**
-   * Player premium: cada jugador puede pagar USD 2 (default) por torneo
-   * para desbloquear features extras (insights, badge, etc). Default OFF.
-   * NO es apuesta — es paywall de software, igual que Spotify/Netflix.
-   */
-  enablePlayerPremium: () => envBool("ENABLE_PLAYER_PREMIUM", false),
 };
 
 /**
