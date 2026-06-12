@@ -52,7 +52,10 @@ export async function GET(
       },
       orderBy: { createdAt: "asc" },
       take: PAGE_SIZE,
-      include: { user: { select: { id: true, name: true, avatar: true } } },
+      include: {
+        user: { select: { id: true, name: true, avatar: true } },
+        reactions: { select: { emoji: true, userId: true } },
+      },
     });
   } else if (before) {
     // Backward: older messages
@@ -67,7 +70,10 @@ export async function GET(
       },
       orderBy: { createdAt: "desc" },
       take: PAGE_SIZE,
-      include: { user: { select: { id: true, name: true, avatar: true } } },
+      include: {
+        user: { select: { id: true, name: true, avatar: true } },
+        reactions: { select: { emoji: true, userId: true } },
+      },
     });
     messages.reverse();
   } else {
@@ -76,7 +82,10 @@ export async function GET(
       where: { groupId },
       orderBy: { createdAt: "desc" },
       take: PAGE_SIZE,
-      include: { user: { select: { id: true, name: true, avatar: true } } },
+      include: {
+        user: { select: { id: true, name: true, avatar: true } },
+        reactions: { select: { emoji: true, userId: true } },
+      },
     });
     messages.reverse();
   }
@@ -84,16 +93,31 @@ export async function GET(
   const nextCursor = messages.length === PAGE_SIZE ? messages[messages.length - 1].id : null;
 
   return NextResponse.json({
-    messages: messages.map((m) => ({
-      id: m.id,
-      type: m.type,
-      content: m.deleted ? "" : m.content,
-      stickerKey: m.deleted ? null : m.stickerKey,
-      deleted: m.deleted,
-      userId: m.userId,
-      user: m.user ? { id: m.user.id, name: m.user.name, avatar: m.user.avatar } : null,
-      createdAt: m.createdAt.toISOString(),
-    })),
+    messages: messages.map((m) => {
+      // Aggregate reactions: { emoji, count, mine }
+      const counts: Record<string, { count: number; mine: boolean }> = {};
+      for (const r of m.reactions ?? []) {
+        const slot = (counts[r.emoji] ??= { count: 0, mine: false });
+        slot.count++;
+        if (r.userId === dbUser.id) slot.mine = true;
+      }
+      const reactions = Object.entries(counts).map(([emoji, v]) => ({
+        emoji,
+        count: v.count,
+        mine: v.mine,
+      }));
+      return {
+        id: m.id,
+        type: m.type,
+        content: m.deleted ? "" : m.content,
+        stickerKey: m.deleted ? null : m.stickerKey,
+        deleted: m.deleted,
+        userId: m.userId,
+        user: m.user ? { id: m.user.id, name: m.user.name, avatar: m.user.avatar } : null,
+        createdAt: m.createdAt.toISOString(),
+        reactions,
+      };
+    }),
     nextCursor,
   });
 }

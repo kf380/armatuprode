@@ -39,6 +39,7 @@ model User {
   wallet             Wallet?
   boosterActivations BoosterActivation[]
   chatMessages       ChatMessage[]
+  chatReactions      ChatReaction[]
   chatMutes          ChatMute[]
   paymentOrders      PaymentOrder[]
   premiumMemberships PremiumMembership[]
@@ -555,10 +556,25 @@ model ChatMessage {
   deleted    Boolean         @default(false)
   createdAt  DateTime        @default(now())
 
-  group Group @relation(fields: [groupId], references: [id])
-  user  User? @relation(fields: [userId], references: [id])
+  group     Group           @relation(fields: [groupId], references: [id])
+  user      User?           @relation(fields: [userId], references: [id])
+  reactions ChatReaction[]
 
   @@index([groupId, createdAt])
+}
+
+model ChatReaction {
+  id        String   @id @default(uuid())
+  messageId String
+  userId    String
+  emoji     String
+  createdAt DateTime @default(now())
+
+  message ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [userId], references: [id])
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
 }
 
 model ChatMute {

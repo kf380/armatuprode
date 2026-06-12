@@ -621,6 +621,12 @@ export function useLiveMatches(pollInterval = 30000) {
 
 // --- Chat types ---
 
+export interface ChatReactionAggregate {
+  emoji: string;
+  count: number;
+  mine: boolean;
+}
+
 export interface ChatMessageItem {
   id: string;
   type: "TEXT" | "STICKER" | "SYSTEM";
@@ -631,6 +637,7 @@ export interface ChatMessageItem {
   user: { id: string; name: string; avatar: string } | null;
   createdAt: string;
   pending?: boolean;
+  reactions?: ChatReactionAggregate[];
 }
 
 export function useGroupChat(groupId: string | null, active: boolean) {
@@ -831,7 +838,14 @@ export function useGroupChat(groupId: string | null, active: boolean) {
 
   const clearError = useCallback(() => setError(null), []);
 
-  return { messages, loading, error, hasOlder, sendMessage, loadOlder, deleteMessage, reportMessage, muteUser, clearError };
+  const refetch = useCallback(() => {
+    if (lastGroupRef.current) {
+      cursorRef.current = null;
+      void loadInitial(lastGroupRef.current);
+    }
+  }, [loadInitial]);
+
+  return { messages, loading, error, hasOlder, sendMessage, loadOlder, deleteMessage, reportMessage, muteUser, clearError, refetch };
 }
 
 // --- Public runtime config (feature flags + caps) ---

@@ -55,6 +55,7 @@ export default function GroupsScreen() {
     deleteMessage,
     reportMessage,
     muteUser,
+    refetch: refetchChat,
     clearError: clearChatError,
   } = useGroupChat(selectedGroup, groupTab === "chat");
   const [chatInput, setChatInput] = useState("");
@@ -631,13 +632,61 @@ export default function GroupsScreen() {
                     );
                   }
 
-                  // SYSTEM message
+                  // SYSTEM message — supports tap-to-react with a fixed set.
                   if (msg.type === "SYSTEM") {
+                    const REACTIONS = ["⚽", "🔥", "😂", "🐔", "💪", "👏"];
+                    const toggleReaction = async (emoji: string, mine: boolean) => {
+                      try {
+                        if (mine) {
+                          await authFetch(
+                            `/api/groups/${selectedGroup}/chat/${msg.id}/react?emoji=${encodeURIComponent(emoji)}`,
+                            { method: "DELETE" },
+                          );
+                        } else {
+                          await authFetch(`/api/groups/${selectedGroup}/chat/${msg.id}/react`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ emoji }),
+                          });
+                        }
+                        refetchChat();
+                      } catch {
+                        // Best-effort: don't surface infra errors for reactions.
+                      }
+                    };
+                    const aggregated = msg.reactions ?? [];
                     return (
-                      <div key={msg.id} className="flex justify-center py-1">
+                      <div key={msg.id} className="flex flex-col items-center py-1 gap-1">
                         <div className="rounded-lg bg-primary/5 border border-primary/10 px-3 py-1.5 text-xs text-text-secondary text-center max-w-[80%]">
                           {msg.content}
                         </div>
+                        {(aggregated.length > 0 || true) && (
+                          <div className="flex flex-wrap items-center justify-center gap-1 max-w-[80%]">
+                            {aggregated.map((r) => (
+                              <button
+                                key={r.emoji}
+                                onClick={() => toggleReaction(r.emoji, r.mine)}
+                                className={`rounded-full px-2 py-0.5 text-[11px] border transition-all active:scale-95 ${
+                                  r.mine
+                                    ? "bg-primary/10 border-primary/40 text-primary"
+                                    : "bg-bg-surface border-border-default text-text-secondary"
+                                }`}
+                              >
+                                {r.emoji} {r.count}
+                              </button>
+                            ))}
+                            {REACTIONS.filter((e) => !aggregated.some((r) => r.emoji === e)).map((e) => (
+                              <button
+                                key={e}
+                                onClick={() => toggleReaction(e, false)}
+                                className="rounded-full px-1.5 py-0.5 text-[11px] text-text-muted opacity-50 hover:opacity-100 active:scale-95"
+                                aria-label={`Reaccionar con ${e}`}
+                              >
+                                {e}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     );
                   }
