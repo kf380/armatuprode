@@ -2,7 +2,7 @@
 
 import { useMemo, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronRight, Plus, Zap, TrendingUp, Target, Bell, ShoppingBag, Radio, Coins, Loader2, CalendarClock } from "lucide-react";
+import { ChevronRight, Plus, Zap, Bell, ShoppingBag, Coins, Loader2, CalendarClock } from "lucide-react";
 import XPBar from "@/components/XPBar";
 import { useApp } from "@/lib/store";
 import { useDashboard, useLiveMatches, deriveLevel, usePublicConfig } from "@/lib/hooks";
@@ -301,11 +301,39 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
       )}
     </AnimatePresence>
     <motion.div
-      className="space-y-6 pb-6"
+      className="relative space-y-6 pb-6"
       variants={stagger}
       initial="hidden"
       animate="show"
     >
+      {/* Cancha sutil — líneas de campo como bg tenuísimo */}
+      <svg
+        className="pointer-events-none absolute inset-x-0 top-0 mx-auto h-[420px] w-full max-w-2xl opacity-[0.05]"
+        viewBox="0 0 600 420"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1"
+        aria-hidden="true"
+        style={{ color: "#FAFAF7" }}
+      >
+        {/* Mid line */}
+        <line x1="0" y1="210" x2="600" y2="210" />
+        {/* Center circle */}
+        <circle cx="300" cy="210" r="60" />
+        <circle cx="300" cy="210" r="2" fill="currentColor" />
+        {/* Top penalty area */}
+        <rect x="170" y="0" width="260" height="80" />
+        <rect x="240" y="0" width="120" height="30" />
+        {/* Bottom penalty area */}
+        <rect x="170" y="340" width="260" height="80" />
+        <rect x="240" y="390" width="120" height="30" />
+        {/* Corner arcs */}
+        <path d="M 0 0 A 12 12 0 0 1 12 12" />
+        <path d="M 600 0 A 12 12 0 0 0 588 12" />
+        <path d="M 0 420 A 12 12 0 0 0 12 408" />
+        <path d="M 600 420 A 12 12 0 0 1 588 408" />
+      </svg>
+
       {/* Header */}
       <motion.div variants={fadeUp} className="flex items-center justify-between gap-2 pt-2 overflow-hidden">
         <div className="flex items-center gap-2 min-w-0 shrink">
@@ -417,27 +445,36 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
       <motion.div variants={fadeUp} className="grid grid-cols-3 gap-3 md:gap-4">
         <button
           onClick={() => onNavigate("ranking")}
-          className="rounded-2xl border border-border-default bg-bg-surface p-4 text-center transition-all hover:border-secondary/30 active:scale-[0.97]"
+          className="relative overflow-hidden rounded-2xl border border-border-default bg-gradient-to-br from-bg-surface to-bg-primary p-4 text-center transition-all hover:border-secondary/30 active:scale-[0.97]"
         >
-          <TrendingUp size={18} className="mx-auto mb-2 text-secondary" />
-          <div className="font-display text-xl font-bold text-secondary">
-            {user.globalRank != null ? `#${user.globalRank.toLocaleString()}` : (user.statsLoaded ? "—" : "…")}
+          <div className="absolute top-2 right-2 text-[8px] font-display tracking-widest text-text-muted/40">RANK</div>
+          <div
+            className="font-display font-black leading-none text-secondary"
+            style={{ fontSize: "clamp(40px, 11vw, 56px)", letterSpacing: "-0.02em" }}
+          >
+            {user.globalRank != null ? user.globalRank : (user.statsLoaded ? "—" : "…")}
           </div>
-          <div className="text-[10px] text-text-muted mt-1 font-display tracking-wider">RANKING</div>
+          <div className="text-[9px] text-text-muted mt-2 font-display tracking-[0.2em]">POSICIÓN</div>
         </button>
-        <div className="rounded-2xl border border-border-default bg-bg-surface p-4 text-center">
-          <Target size={18} className="mx-auto mb-2 text-accent" />
-          <div className="font-display text-xl font-bold text-accent">
-            {user.precision != null ? `${user.precision}%` : (user.statsLoaded ? "—" : "…")}
+        <div className="relative overflow-hidden rounded-2xl border border-border-default bg-gradient-to-br from-bg-surface to-bg-primary p-4 text-center">
+          <div className="absolute top-2 right-2 text-[8px] font-display tracking-widest text-text-muted/40">%</div>
+          <div
+            className="font-display font-black leading-none text-accent"
+            style={{ fontSize: "clamp(40px, 11vw, 56px)", letterSpacing: "-0.02em" }}
+          >
+            {user.precision != null ? user.precision : (user.statsLoaded ? "—" : "…")}
           </div>
-          <div className="text-[10px] text-text-muted mt-1 font-display tracking-wider">PRECISION</div>
+          <div className="text-[9px] text-text-muted mt-2 font-display tracking-[0.2em]">PRECISIÓN</div>
         </div>
-        <div className="rounded-2xl border border-border-default bg-bg-surface p-4 text-center">
-          <div className="text-lg mb-1.5">🎯</div>
-          <div className="font-display text-xl font-bold text-text-primary">
+        <div className="relative overflow-hidden rounded-2xl border border-border-default bg-gradient-to-br from-bg-surface to-bg-primary p-4 text-center">
+          <div className="absolute top-2 right-2 text-base">🎯</div>
+          <div
+            className="font-display font-black leading-none text-text-primary"
+            style={{ fontSize: "clamp(40px, 11vw, 56px)", letterSpacing: "-0.02em" }}
+          >
             {user.statsLoaded ? user.exactos : "…"}
           </div>
-          <div className="text-[10px] text-text-muted mt-1 font-display tracking-wider">EXACTOS</div>
+          <div className="text-[9px] text-text-muted mt-2 font-display tracking-[0.2em]">EXACTOS</div>
         </div>
       </motion.div>
 
@@ -577,16 +614,31 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
               onClick={() => { setLiveMatchId(lm.id); setScreen("live-match"); }}
               className="w-full rounded-2xl border border-danger/30 bg-gradient-to-r from-danger/10 via-bg-surface to-danger/5 p-4 flex items-center gap-4 transition-all hover:border-danger/40 active:scale-[0.99] mb-2"
             >
-              <div className="relative shrink-0">
-                <Radio size={20} className="text-danger" />
+              {/* Pelotita pulsando estilo marcador de cancha */}
+              <div className="relative shrink-0 flex flex-col items-center gap-1">
                 <motion.div
-                  className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-danger"
-                  animate={{ opacity: [1, 0.3, 1] }}
-                  transition={{ duration: 1, repeat: Infinity }}
-                />
+                  className="text-2xl"
+                  animate={{ scale: [1, 1.15, 1] }}
+                  transition={{ duration: 1, repeat: Infinity, ease: "easeInOut" }}
+                >
+                  ⚽
+                </motion.div>
+                {lm.minute != null && (
+                  <div
+                    className="font-display font-black leading-none text-danger"
+                    style={{ fontSize: 22, letterSpacing: "-0.05em", textShadow: "0 1px 3px rgba(0,0,0,0.5)" }}
+                  >
+                    {lm.minute}<span className="text-sm">&apos;</span>
+                  </div>
+                )}
               </div>
               <div className="flex-1 text-left">
                 <div className="flex items-center gap-2">
+                  <motion.span
+                    animate={{ opacity: [1, 0.4, 1] }}
+                    transition={{ duration: 1.2, repeat: Infinity }}
+                    className="inline-block h-2 w-2 rounded-full bg-danger"
+                  />
                   <span className="font-display text-xs font-bold tracking-widest text-danger">EN VIVO</span>
                 </div>
                 <div className="text-sm font-bold mt-0.5">
@@ -601,7 +653,6 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
                     {lm.scoreA ?? 0} - {lm.scoreB ?? 0}
                   </motion.span>{" "}
                   {lm.teamBCode} {lm.teamBFlag}
-                  {lm.minute != null && <span className="text-danger ml-2 text-xs">{lm.minute}&apos;</span>}
                 </div>
                 {(() => {
                   const myMatch = apiMatches.find((m) => m.id === lm.id);
