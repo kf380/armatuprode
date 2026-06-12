@@ -46,15 +46,25 @@ export default function GroupsScreen() {
     revealMode?: boolean;
   };
   const [upcomingFriends, setUpcomingFriends] = useState<UpcomingMatchResp | null>(null);
+  type Rival = { userId: string; name: string; avatar: string; diff: number; myTotal: number; theirTotal: number; youWonLast5: number; theyWonLast5: number; tieLast5: number };
+  const [rivals, setRivals] = useState<Rival[]>([]);
   useEffect(() => {
-    if (!selectedGroup) { setUpcomingFriends(null); return; }
+    if (!selectedGroup) { setUpcomingFriends(null); setRivals([]); return; }
     let cancelled = false;
     (async () => {
       try {
-        const res = await authFetch(`/api/groups/${selectedGroup}/upcoming-match`);
-        if (!res.ok) return;
-        const data: UpcomingMatchResp = await res.json();
-        if (!cancelled) setUpcomingFriends(data);
+        const [u, r] = await Promise.all([
+          authFetch(`/api/groups/${selectedGroup}/upcoming-match`),
+          authFetch(`/api/groups/${selectedGroup}/rivals`),
+        ]);
+        if (u.ok) {
+          const data: UpcomingMatchResp = await u.json();
+          if (!cancelled) setUpcomingFriends(data);
+        }
+        if (r.ok) {
+          const data: { rivals: Rival[] } = await r.json();
+          if (!cancelled) setRivals(data.rivals);
+        }
       } catch { /* best-effort */ }
     })();
     return () => { cancelled = true; };
@@ -606,6 +616,33 @@ export default function GroupsScreen() {
               );
             })}
           </motion.div>
+          {/* Tu rival — pulls from /rivals */}
+          {rivals.length > 0 && (() => {
+            const top = rivals[0];
+            const youAhead = top.diff > 0;
+            const balance = `${top.youWonLast5}-${top.theyWonLast5}${top.tieLast5 > 0 ? `-${top.tieLast5}` : ""}`;
+            const headline = youAhead
+              ? `Le sacás +${top.diff} pts a ${top.name.split(" ")[0]}`
+              : top.diff === 0
+              ? `Empate con ${top.name.split(" ")[0]}`
+              : `${top.name.split(" ")[0]} te saca ${Math.abs(top.diff)} pts`;
+            const last5label = top.youWonLast5 + top.theyWonLast5 + top.tieLast5 > 0
+              ? `Últimas 5: ${balance}`
+              : "Sin head-to-head todavía";
+            return (
+              <div className={`rounded-2xl border p-3 mt-2 flex items-center gap-3 ${
+                youAhead ? "border-primary/30 bg-primary/5" : top.diff === 0 ? "border-border-default bg-bg-surface/60" : "border-amber-500/30 bg-amber-500/5"
+              }`}>
+                <div className="text-2xl">{youAhead ? "🚀" : top.diff === 0 ? "🤝" : "👀"}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-display text-[10px] tracking-widest text-text-muted mb-0.5">TU RIVAL</div>
+                  <div className="text-sm font-bold truncate">{headline}</div>
+                  <div className="text-[11px] text-text-muted">{last5label}</div>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Share-to-WA del ranking del día — botón prominent */}
           {ranking.length > 0 && dbUser && (() => {
             const myEntry = ranking.find((r) => r.userId === dbUser.id);

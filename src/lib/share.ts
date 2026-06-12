@@ -59,7 +59,7 @@ export function getExactResultContent(match: { teamA: { code: string; flag: stri
 
 export function getReferralContent(code: string): ShareContent {
   return {
-    text: "Proba ArmatuProde! Arma tu prode y competi con amigos ⚽",
+    text: "Te invito a ArmatuProde — armamos un prode del Mundial. Si entrás con mi link, nos dan 100 coins a cada uno ⚽",
     url: `${APP_URL}?ref=${code}`,
   };
 }

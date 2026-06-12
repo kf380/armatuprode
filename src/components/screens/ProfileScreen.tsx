@@ -238,19 +238,24 @@ export default function ProfileScreen() {
 
       {/* Referral */}
       {dbUser && (
-        <motion.div variants={fadeUp} className="rounded-xl border border-primary/20 bg-primary/5 p-4">
-          <h3 className="font-display text-xs font-bold tracking-wider mb-2">INVITA AMIGOS Y GANA XP</h3>
-          <p className="text-xs text-text-secondary mb-3">
-            Compartí tu codigo y ganá +30 XP por cada amigo que se una
-          </p>
+        <motion.div variants={fadeUp} className="rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/10 to-primary/5 p-4">
+          <div className="flex items-start gap-3 mb-3">
+            <div className="text-2xl">🎁</div>
+            <div className="flex-1">
+              <h3 className="font-display text-xs font-bold tracking-wider mb-1">INVITÁ AMIGOS, GANAN AMBOS</h3>
+              <p className="text-xs text-text-secondary leading-relaxed">
+                Pasale tu link a un amigo. Cuando se sume, <strong className="text-primary">vos +100 coins</strong> y <strong className="text-primary">él +100 coins</strong>. Sin tope.
+              </p>
+            </div>
+          </div>
           <div className="flex items-center gap-2 mb-3">
-            <div className="flex-1 rounded-lg border border-border-default bg-bg-primary px-3 py-2 font-mono text-sm text-primary">
-              {dbUser?.referralCode || "..."}
+            <div className="flex-1 rounded-lg border border-border-default bg-bg-primary px-3 py-2 font-mono text-[11px] text-primary truncate">
+              armatuprode.com.ar/?ref={dbUser.referralCode || "..."}
             </div>
           </div>
           <ShareButton
             content={getReferralContent(dbUser?.referralCode || "")}
-            label="COMPARTIR CODIGO"
+            label="COMPARTIR MI LINK"
             variant="primary"
           />
         </motion.div>
