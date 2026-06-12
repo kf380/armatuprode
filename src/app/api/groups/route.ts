@@ -6,6 +6,7 @@ import { limits } from "@/lib/limits";
 import { PLANS, isPublicPlan, resolveLimits } from "@/lib/plans";
 import type { GroupType, PlanType } from "@prisma/client";
 import { log } from "@/lib/log";
+import { trackServer } from "@/lib/analytics-server";
 
 export async function GET(request: NextRequest) {
   const { user } = await getAuthUser(request);
@@ -262,5 +263,11 @@ export async function POST(request: NextRequest) {
     createdById: dbUser.id,
   });
 
+  void trackServer(dbUser.id, "group_create", {
+    group_id: group.id,
+    type: group.type,
+    plan_type: group.planType,
+    money_mode: group.moneyMode,
+  });
   return NextResponse.json({ group }, { status: 201 });
 }

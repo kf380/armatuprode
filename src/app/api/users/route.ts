@@ -7,6 +7,7 @@ import { log } from "@/lib/log";
 import { rateLimit } from "@/lib/ratelimit";
 import { limits } from "@/lib/limits";
 import { sendWelcomeEmail } from "@/lib/welcome-email";
+import { trackServer } from "@/lib/analytics-server";
 
 export async function POST(request: NextRequest) {
   try {
@@ -116,6 +117,10 @@ export async function POST(request: NextRequest) {
       await sendWelcomeEmail({ email: dbUser.email, name: dbUser.name });
     }
 
+    void trackServer(dbUser.id, "signup_completed", {
+      email_verified: emailConfirmed,
+      country: dbUser.country,
+    });
     return NextResponse.json({ user: dbUser }, { status: 201 });
   } catch (err) {
     log("error", "users_post_failed", { err: String(err) });

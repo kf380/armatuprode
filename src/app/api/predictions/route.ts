@@ -6,6 +6,7 @@ import { creditCoins } from "@/lib/wallet";
 import { WalletLotSource } from "@prisma/client";
 import { log, logSettled } from "@/lib/log";
 import { rateLimit } from "@/lib/ratelimit";
+import { trackServer } from "@/lib/analytics-server";
 
 export async function GET(request: NextRequest) {
   const { user } = await getAuthUser(request);
@@ -165,6 +166,13 @@ export async function POST(request: NextRequest) {
 
   if (!existing) {
     log("info", "prediction_created", { userId: dbUser.id, matchId, scoreA, scoreB });
+    void trackServer(dbUser.id, "prediction_made", {
+      match_id: matchId,
+      phase: match.phase,
+      booster_applied: appliedBooster,
+    });
+  } else {
+    void trackServer(dbUser.id, "prediction_updated", { match_id: matchId });
   }
   // Grant +10 XP and +10 coins for new predictions only
   if (!existing) {

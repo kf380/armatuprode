@@ -4,6 +4,7 @@ import { getAuthUser } from "@/lib/supabase-server";
 import { createActivityEvent } from "@/lib/notifications";
 import { logSettled } from "@/lib/log";
 import { canJoinGroup } from "@/lib/group-policy";
+import { trackServer } from "@/lib/analytics-server";
 
 export async function POST(
   request: NextRequest,
@@ -82,5 +83,6 @@ export async function POST(
     ],
   );
 
+  void trackServer(dbUser.id, "group_join", { group_id: id, via: "invite_code" });
   return NextResponse.json({ member }, { status: 201 });
 }
