@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useEffect, useRef } from "react";
+import { useMemo, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { ChevronRight, Plus, Zap, TrendingUp, Target, Bell, ShoppingBag, Radio, Coins, Loader2 } from "lucide-react";
+import { ChevronRight, Plus, Zap, TrendingUp, Target, Bell, ShoppingBag, Radio, Coins, Loader2, CalendarClock } from "lucide-react";
 import XPBar from "@/components/XPBar";
 import { useApp } from "@/lib/store";
 import { useMatches, useGroups, useUserStats, useLiveMatches, deriveLevel, usePlayerPremium, usePublicConfig } from "@/lib/hooks";
@@ -21,7 +21,7 @@ const fadeUp = {
 } as const;
 
 export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, data?: Record<string, string>) => void }) {
-  const { setScreen, unreadCount, coins, dbUser, setLiveMatchId, authFetch } = useApp();
+  const { setScreen, unreadCount, coins, dbUser, setLiveMatchId, setActiveTab, authFetch } = useApp();
   const { config } = usePublicConfig();
   const { isPremium } = usePlayerPremium();
   const pushPromptedRef = useRef(false);
@@ -47,6 +47,72 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
   const { groups: apiGroups, loading: groupsLoading } = useGroups();
   const { stats } = useUserStats();
   const { matches: liveMatches } = useLiveMatches(60000);
+
+  // Confetti when a match the user predicted just transitioned LIVE → FINISHED
+  // with points. Uses a ref so the previous snapshot is per-render-cycle, not
+  // per-component-instance (works with the 30s polling inside useMatches).
+  const prevMatchStatusesRef = useRef<Record<string, string>>({});
+  useEffect(() => {
+    let celebrated = false;
+    for (const m of apiMatches) {
+      const prev = prevMatchStatusesRef.current[m.id];
+      const justFinished = (prev === "live" || prev === "upcoming") && m.status === "finished";
+      const acertaste = (m.pointsEarned ?? 0) > 0 && !!m.userPrediction;
+      if (justFinished && acertaste && !celebrated) {
+        celebrated = true;
+        import("canvas-confetti").then(({ default: confetti }) => {
+          confetti({ particleCount: 120, spread: 70, origin: { y: 0.6 }, colors: ["#10B981", "#F5B82E", "#FAFAF7"] });
+          setTimeout(() => confetti({ particleCount: 60, spread: 100, origin: { y: 0.7 } }), 250);
+        }).catch(() => {});
+      }
+      prevMatchStatusesRef.current[m.id] = m.status;
+    }
+  }, [apiMatches]);
+
+  // Tick every 30s to recompute countdown labels. 30s feels live without
+  // re-rendering this big tree every second.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((n) => n + 1), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Pick the "next big match" for the countdown banner:
+  //   1. Argentina's next upcoming match (if any in next 7 days)
+  //   2. Otherwise, the soonest upcoming match in the next 48h
+  // Hidden when there's a LIVE match (the LIVE banner takes the slot).
+  const nextBigMatch = useMemo(() => {
+    if (liveMatches.length > 0) return null;
+    const now = Date.now();
+    const horizonArg = now + 7 * 86_400_000;
+    const horizonGeneric = now + 2 * 86_400_000;
+    const upcoming = apiMatches
+      .filter((m) => m.status === "upcoming")
+      .map((m) => ({ m, kickoff: new Date(m.matchDateIso).getTime() }))
+      .filter((x) => x.kickoff > now)
+      .sort((a, b) => a.kickoff - b.kickoff);
+    const argentina = upcoming.find(
+      (x) =>
+        x.kickoff < horizonArg &&
+        (/argentina/i.test(x.m.teamA.name) || /argentina/i.test(x.m.teamB.name)),
+    );
+    if (argentina) return argentina;
+    const generic = upcoming.find((x) => x.kickoff < horizonGeneric);
+    return generic ?? null;
+  }, [apiMatches, liveMatches.length]);
+
+  const countdownLabel = useMemo(() => {
+    if (!nextBigMatch) return null;
+    const diff = nextBigMatch.kickoff - Date.now();
+    if (diff <= 0) return null;
+    const totalMin = Math.floor(diff / 60_000);
+    const d = Math.floor(totalMin / (60 * 24));
+    const h = Math.floor((totalMin % (60 * 24)) / 60);
+    const m = totalMin % 60;
+    if (d > 0) return `en ${d}d ${h}h`;
+    if (h > 0) return `en ${h}h ${m}m`;
+    return `en ${m}m`;
+  }, [nextBigMatch]);
 
   // User data from dbUser or fallback to mock
   const user = useMemo(() => {
@@ -309,6 +375,28 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
           )}
         </div>
       </motion.div>
+
+      {/* Countdown banner — only shown when no live match is taking the slot */}
+      {nextBigMatch && countdownLabel && (
+        <motion.div variants={fadeUp}>
+          <button
+            onClick={() => setActiveTab("matches")}
+            className="w-full rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/5 via-bg-surface to-primary/5 p-4 flex items-center gap-4 transition-all hover:border-primary/40 active:scale-[0.99] mb-2 text-left"
+          >
+            <CalendarClock size={20} className="text-primary shrink-0" />
+            <div className="flex-1">
+              <div className="font-display text-[10px] font-bold tracking-widest text-primary">
+                PRÓXIMO PARTIDO
+              </div>
+              <div className="text-sm font-bold mt-0.5">
+                {nextBigMatch.m.teamA.flag} {nextBigMatch.m.teamA.code} vs {nextBigMatch.m.teamB.code} {nextBigMatch.m.teamB.flag}
+              </div>
+              <div className="text-xs text-text-muted mt-0.5">{countdownLabel}</div>
+            </div>
+            <ChevronRight size={14} className="text-text-muted shrink-0" />
+          </button>
+        </motion.div>
+      )}
 
       {/* Live Match Banner */}
       {liveMatches.length > 0 && (

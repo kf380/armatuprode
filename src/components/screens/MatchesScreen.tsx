@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, AlertTriangle, Minus, Plus, X, Sparkles, Loader2, CalendarX, Search } from "lucide-react";
 import { useApp } from "@/lib/store";
@@ -84,6 +84,14 @@ export default function MatchesScreen() {
   const [tempQualifier, setTempQualifier] = useState<string | null>(null);
   const [savedAnimation, setSavedAnimation] = useState<string | null>(null);
   const [sharePrompt, setSharePrompt] = useState<string | null>(null);
+  const [lockedToast, setLockedToast] = useState<string | null>(null);
+
+  // Auto-clear the "match arrancó" toast after 3s.
+  useEffect(() => {
+    if (!lockedToast) return;
+    const t = setTimeout(() => setLockedToast(null), 3000);
+    return () => clearTimeout(t);
+  }, [lockedToast]);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -166,6 +174,12 @@ export default function MatchesScreen() {
     // status hasn't been synced yet.
     const kickedOff = new Date(match.matchDateIso).getTime() <= Date.now();
     if (kickedOff || match.status !== "upcoming") {
+      const live = match.status === "live";
+      setLockedToast(
+        live
+          ? "El partido está en vivo. Mirá el resultado, no se puede cambiar el pronóstico."
+          : "Este partido ya empezó. Tu pronóstico quedó cerrado.",
+      );
       return;
     }
     const existing = predictions[matchId];
@@ -805,6 +819,22 @@ export default function MatchesScreen() {
                 );
               })()}
             </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Toast: match arrancado / en vivo */}
+      <AnimatePresence>
+        {lockedToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 40 }}
+            transition={{ duration: 0.25 }}
+            className="fixed left-1/2 -translate-x-1/2 bottom-24 z-[70] max-w-[90vw] rounded-full border border-amber-500/40 bg-bg-surface px-4 py-2.5 text-xs text-text-primary shadow-2xl flex items-center gap-2"
+          >
+            <AlertTriangle size={14} className="text-amber-400 shrink-0" />
+            <span>{lockedToast}</span>
           </motion.div>
         )}
       </AnimatePresence>
