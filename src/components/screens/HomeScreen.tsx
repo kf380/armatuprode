@@ -332,7 +332,17 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
                   <span className="font-display text-xs font-bold tracking-widest text-danger">EN VIVO</span>
                 </div>
                 <div className="text-sm font-bold mt-0.5">
-                  {lm.teamAFlag} {lm.teamACode} {lm.scoreA ?? 0} - {lm.scoreB ?? 0} {lm.teamBCode} {lm.teamBFlag}
+                  {lm.teamAFlag} {lm.teamACode}{" "}
+                  <motion.span
+                    key={`${lm.id}-${lm.scoreA ?? 0}-${lm.scoreB ?? 0}`}
+                    initial={{ scale: 1.6, color: "#10B981" }}
+                    animate={{ scale: 1, color: "var(--color-text-primary, currentColor)" }}
+                    transition={{ duration: 0.7 }}
+                    className="inline-block"
+                  >
+                    {lm.scoreA ?? 0} - {lm.scoreB ?? 0}
+                  </motion.span>{" "}
+                  {lm.teamBCode} {lm.teamBFlag}
                   {lm.minute != null && <span className="text-danger ml-2 text-xs">{lm.minute}&apos;</span>}
                 </div>
               </div>

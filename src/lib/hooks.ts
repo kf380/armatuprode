@@ -273,6 +273,17 @@ export function useMatches() {
     }
   }, [fetchMatches]);
 
+  // Live polling: while any match is LIVE, refetch every 30s so scores update
+  // in real time without manual refresh. Cleared as soon as no match is live.
+  const hasLive = matches.some((m) => m.status === "live");
+  useEffect(() => {
+    if (!hasLive) return;
+    const id = setInterval(() => {
+      fetchMatches();
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [hasLive, fetchMatches]);
+
   return { matches, tournamentId, tournamentName, loading, error, refetch: fetchMatches };
 }
 
