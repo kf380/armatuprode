@@ -66,7 +66,7 @@ Si todavía no armaste tu grupo en Armatuprode, este es el momento:
 
 → Entrá a https://armatuprode.com.ar
 → Creá tu grupo en menos de un minuto
-→ Pasale el link por WhatsApp a los del laburo, el fútbol o la familia
+→ Pasale el link por WhatsApp a tu grupo del laburo, del fútbol o la familia
 
 Una vez que arranca el primer partido, ya no se puede cargar el pronóstico de ese encuentro.
 

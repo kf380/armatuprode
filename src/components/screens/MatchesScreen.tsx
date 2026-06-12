@@ -178,7 +178,7 @@ export default function MatchesScreen() {
       setLockedToast(
         live
           ? "Ya rueda la pelota. Mirá el partido, el pronóstico quedó cerrado."
-          : "Llegaste tarde, hermano. Este ya está cerrado.",
+          : "Llegaste tarde. Este pronóstico ya cerró.",
       );
       return;
     }

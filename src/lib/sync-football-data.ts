@@ -45,11 +45,19 @@ export type SyncSummary = {
 const NAME_ALIASES: Record<string, string> = {
   "czechia": "czech republic",
   "korea republic": "south korea",
+  "bosnia herzegovina": "bosnia herz",
 };
 
 function normalize(s: string): string {
-  const lower = s.trim().toLowerCase();
-  return NAME_ALIASES[lower] ?? lower;
+  return s
+    .trim()
+    .toLowerCase()
+    // collapse separators (&, -, .) y espacios múltiples → single space
+    .replace(/[&\-.,/]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    // run aliases AFTER cleanup so 'bosnia-herzegovina' → 'bosnia herzegovina' → 'bosnia herz'
+    .replace(/^(.+)$/, (match) => NAME_ALIASES[match] ?? match);
 }
 
 export type SyncOptions = {

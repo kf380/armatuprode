@@ -86,7 +86,44 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
   const stats = dash?.stats ?? null;
   // Prefer live polled (más fresco). Fallback a dashboard's snapshot mientras
   // useLiveMatches no termina su primer fetch.
-  const liveMatches = livePolled.length > 0 ? livePolled : (dash?.liveMatches ?? []);
+  const serverLive = livePolled.length > 0 ? livePolled : (dash?.liveMatches ?? []);
+
+  // "Effectively LIVE" = matches con kickoff pasado y NO FINISHED, aunque el
+  // server todavía no los haya marcado como LIVE (cuando el sync se atrasa).
+  // Evita que aparezcan como "próximo partido" siendo ya jugados.
+  const presumedLive = useMemo(() => {
+    const now = Date.now();
+    const liveIds = new Set(serverLive.map((l) => l.id));
+    return apiMatches.filter(
+      (m) =>
+        m.status === "upcoming" &&
+        new Date(m.matchDateIso).getTime() <= now &&
+        !liveIds.has(m.id),
+    );
+  }, [apiMatches, serverLive]);
+
+  const liveMatches = useMemo(() => {
+    // Merge: server-confirmed live first, then presumed-live (without score data).
+    const extras = presumedLive.map((m) => ({
+      id: m.id,
+      teamACode: m.teamA.code,
+      teamAName: m.teamA.name,
+      teamAFlag: m.teamA.flag,
+      teamBCode: m.teamB.code,
+      teamBName: m.teamB.name,
+      teamBFlag: m.teamB.flag,
+      scoreA: m.scoreA ?? null,
+      scoreB: m.scoreB ?? null,
+      minute: null as number | null,
+      period: null as string | null,
+      matchGroup: m.group,
+      phase: m.phase,
+      userPrediction: m.userPrediction
+        ? { scoreA: m.userPrediction.scoreA, scoreB: m.userPrediction.scoreB }
+        : null,
+    }));
+    return [...serverLive, ...extras];
+  }, [serverLive, presumedLive]);
   // Mini-catálogo cliente para resolver icon + name de cada badge sin pegar al
   // server. Si en el futuro agregamos badges nuevos, sumar la entry acá.
   const BADGE_CATALOG: Record<string, { icon: string; name: string; description: string }> = {
@@ -187,8 +224,10 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
     if (liveMatches.length > 0) return null;
     const now = Date.now();
     const horizonGeneric = now + 2 * 86_400_000;
+    // Defensive: incluso si findNextArgentina devuelve algo, validamos kickoff > now
+    // (por si el sync no actualizó el match a LIVE/FINISHED).
     const nextArg = findNextArgentina(apiMatches);
-    if (nextArg) {
+    if (nextArg && new Date(nextArg.matchDateIso).getTime() > now) {
       return { m: nextArg, kickoff: new Date(nextArg.matchDateIso).getTime() };
     }
     const upcoming = apiMatches
@@ -509,11 +548,11 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
               >
                 <div className="text-4xl mb-3">🏆</div>
                 <div className="font-display text-sm font-bold tracking-wider mb-1">
-                  ARMÁ LA BARRA
+                  JUNTÁ TU GENTE
                 </div>
                 <div className="text-xs text-text-secondary leading-relaxed max-w-xs mx-auto mb-4">
-                  Creá tu prode en 30 segundos y traé a los pibes por WhatsApp.
-                  Con 2 ya picás.
+                  Creá tu prode en 30 segundos y pasale el link a tu grupo
+                  de WhatsApp. Con 2 personas ya picás.
                 </div>
                 <div className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-bg-primary font-display text-xs font-bold tracking-widest">
                   <Plus size={14} /> CREAR MI PRODE
@@ -565,7 +604,7 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
               {user.streak >= 5
                 ? "Imparable. Levantala que está caliente."
                 : user.streak >= 3
-                ? "No la cortes, hermano. Próximo partido te espera."
+                ? "No la cortes. El próximo partido te espera."
                 : "Vas con manija. Mantenela con la próxima."}
             </div>
           </div>
@@ -597,7 +636,7 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
                 {nextBigMatch.m.teamA.flag} {nextBigMatch.m.teamA.code} vs {nextBigMatch.m.teamB.code} {nextBigMatch.m.teamB.flag}
               </div>
               <div className={`text-xs mt-0.5 ${isArgentinaUpcoming ? "text-white/80" : "text-text-muted"}`}>
-                {isArgentinaUpcoming ? `${countdownLabel} · cargá tu pronóstico, hermano` : countdownLabel}
+                {isArgentinaUpcoming ? `${countdownLabel} · cargá tu pronóstico` : countdownLabel}
               </div>
             </div>
             <ChevronRight size={14} className="text-text-muted shrink-0" />
