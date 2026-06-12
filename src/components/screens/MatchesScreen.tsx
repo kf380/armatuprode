@@ -226,6 +226,7 @@ export default function MatchesScreen() {
     }));
     setSavedAnimation(editingMatch);
     setEditingMatch(null);
+    void import("@/lib/sound-fx").then((m) => m.playPickConfirm()).catch(() => {});
 
     // Show share prompt after save
     if (match) {
@@ -240,8 +241,14 @@ export default function MatchesScreen() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="animate-spin text-primary" size={32} />
+      <div className="space-y-3 px-1 pt-6">
+        {[0, 1, 2, 3, 4].map((i) => (
+          <div
+            key={i}
+            className="h-[72px] rounded-2xl border border-border-default bg-gradient-to-r from-bg-surface via-bg-primary/40 to-bg-surface animate-pulse"
+            style={{ animationDelay: `${i * 80}ms` }}
+          />
+        ))}
       </div>
     );
   }

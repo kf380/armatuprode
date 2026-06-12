@@ -2,8 +2,9 @@
 
 import { useMemo } from "react";
 import { motion } from "framer-motion";
-import { useState } from "react";
-import { Settings, Share2, ChevronRight, Crown, LogOut, Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Settings, Share2, ChevronRight, Crown, LogOut, Loader2, Volume2, VolumeX } from "lucide-react";
+import { soundsEnabled, setSoundsEnabled } from "@/lib/sound-fx";
 import XPBar from "@/components/XPBar";
 import { useApp } from "@/lib/store";
 import {
@@ -33,6 +34,8 @@ export default function ProfileScreen() {
   const { config } = usePublicConfig();
   const { isPremium } = usePlayerPremium();
   const [signingOut, setSigningOut] = useState(false);
+  const [sfxOn, setSfxOn] = useState(false);
+  useEffect(() => { setSfxOn(soundsEnabled()); }, []);
 
   const handleSignOut = async () => {
     if (signingOut) return;
@@ -273,6 +276,23 @@ export default function ProfileScreen() {
         </button>
         <button className="w-full rounded-xl border border-border-default bg-bg-surface py-3 text-xs text-text-muted flex items-center justify-center gap-2 hover:bg-bg-surface-hover transition-all">
           Historial completo <ChevronRight size={14} />
+        </button>
+
+        <button
+          onClick={() => {
+            const next = !sfxOn;
+            setSoundsEnabled(next);
+            setSfxOn(next);
+          }}
+          className="w-full rounded-xl border border-border-default bg-bg-surface py-3 px-4 text-xs flex items-center justify-between hover:border-primary/30 transition-all"
+        >
+          <span className="flex items-center gap-2">
+            {sfxOn ? <Volume2 size={14} className="text-primary" /> : <VolumeX size={14} className="text-text-muted" />}
+            Sonidos
+          </span>
+          <span className={`font-display tracking-widest text-[10px] ${sfxOn ? "text-primary" : "text-text-muted"}`}>
+            {sfxOn ? "ON" : "OFF"}
+          </span>
         </button>
 
         <button

@@ -40,6 +40,25 @@ export default function GroupsScreen() {
   const [rankingDate, setRankingDate] = useState<string | null>(null);
   const { detail, loading: detailLoading } = useGroupDetail(selectedGroup, rankingDate);
 
+  type UpcomingMatchResp = {
+    match: { id: string; teamAName: string; teamBName: string; teamAFlag: string; teamBFlag: string; teamACode: string; teamBCode: string; matchDate: string } | null;
+    predictions: { userId: string; name: string; avatar: string; scoreA: number | null; scoreB: number | null; isMe: boolean }[];
+  };
+  const [upcomingFriends, setUpcomingFriends] = useState<UpcomingMatchResp | null>(null);
+  useEffect(() => {
+    if (!selectedGroup) { setUpcomingFriends(null); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await authFetch(`/api/groups/${selectedGroup}/upcoming-match`);
+        if (!res.ok) return;
+        const data: UpcomingMatchResp = await res.json();
+        if (!cancelled) setUpcomingFriends(data);
+      } catch { /* best-effort */ }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedGroup, authFetch]);
+
   useEffect(() => {
     setRankingDate(null);
   }, [selectedGroup]);
@@ -474,6 +493,30 @@ export default function GroupsScreen() {
                     </button>
                   );
                 })}
+              </div>
+            )}
+            {upcomingFriends?.match && upcomingFriends.predictions.some((p) => p.scoreA != null) && (
+              <div className="rounded-2xl border border-border-default bg-bg-surface/60 p-3 mb-2">
+                <div className="font-display text-[10px] tracking-widest text-text-muted mb-2">
+                  PRÓXIMO · {upcomingFriends.match.teamAFlag} {upcomingFriends.match.teamACode} vs {upcomingFriends.match.teamBCode} {upcomingFriends.match.teamBFlag}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {upcomingFriends.predictions
+                    .filter((p) => p.scoreA != null && p.scoreB != null)
+                    .map((p) => (
+                      <div
+                        key={p.userId}
+                        className={`rounded-lg px-2.5 py-1 text-xs border ${
+                          p.isMe
+                            ? "bg-primary/10 border-primary/40 text-primary font-bold"
+                            : "bg-bg-primary border-border-default text-text-secondary"
+                        }`}
+                      >
+                        <span className="opacity-80">{p.isMe ? "Vos" : p.name.split(" ")[0]}</span>{" "}
+                        <span className="font-display">{p.scoreA}-{p.scoreB}</span>
+                      </div>
+                    ))}
+                </div>
               </div>
             )}
           <motion.div className="space-y-1.5" variants={stagger} initial="hidden" animate="show">

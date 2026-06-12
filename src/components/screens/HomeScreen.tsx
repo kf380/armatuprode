@@ -65,6 +65,7 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
           confetti({ particleCount: 120, spread: 70, origin: { y: 0.6 }, colors: ["#10B981", "#F5B82E", "#FAFAF7"] });
           setTimeout(() => confetti({ particleCount: 60, spread: 100, origin: { y: 0.7 } }), 250);
         }).catch(() => {});
+        void import("@/lib/sound-fx").then((m) => m.playWinFanfare()).catch(() => {});
       }
       prevMatchStatusesRef.current[m.id] = m.status;
     }
@@ -344,8 +345,13 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
         </div>
         <div className="flex gap-3 overflow-x-auto pb-3 -mx-1 px-1 snap-x md:grid md:grid-cols-3 md:overflow-visible">
           {groupsLoading ? (
-            <div className="flex items-center justify-center py-8 col-span-3">
-              <Loader2 className="animate-spin text-primary" size={24} />
+            <div className="flex gap-3 col-span-3 w-full">
+              {[0, 1, 2].map((i) => (
+                <div
+                  key={i}
+                  className="flex-1 min-w-[160px] h-[112px] rounded-2xl border border-border-default bg-gradient-to-br from-bg-surface to-bg-primary/40 animate-pulse"
+                />
+              ))}
             </div>
           ) : (
             <>
