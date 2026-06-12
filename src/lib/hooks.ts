@@ -242,6 +242,52 @@ export function deriveLevel(xp: number): { level: number; levelName: string; xpN
 
 // --- Hooks ---
 
+export interface DashboardPayload {
+  stats: UserStats;
+  tournament: { id: string; name: string; type: string; slug: string } | null;
+  matches: ApiMatch[];
+  liveMatches: LiveMatch[];
+  groups: Array<{ id: string; name: string; emoji: string; inviteCode: string; memberCount: number }>;
+  badges: Array<{ id: string; earnedAt: string }>;
+}
+
+/**
+ * Aggregated dashboard fetch. Replaces 5 parallel hooks on Home with one
+ * round-trip. Use this in HomeScreen instead of useMatches/useGroups/...
+ * — keeps the others available for screens that don't need everything.
+ */
+export function useDashboard() {
+  const { authFetch } = useApp();
+  const [data, setData] = useState<DashboardPayload | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const fetchedRef = useRef(false);
+
+  const fetchDashboard = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await authFetch("/api/users/dashboard");
+      if (!res.ok) throw new Error("Failed");
+      const payload: DashboardPayload = await res.json();
+      setData(payload);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error");
+    } finally {
+      setLoading(false);
+    }
+  }, [authFetch]);
+
+  useEffect(() => {
+    if (!fetchedRef.current) {
+      fetchedRef.current = true;
+      fetchDashboard();
+    }
+  }, [fetchDashboard]);
+
+  return { data, loading, error, refetch: fetchDashboard };
+}
+
 export function useMatches() {
   const { authFetch } = useApp();
   const [matches, setMatches] = useState<ScreenMatch[]>([]);
