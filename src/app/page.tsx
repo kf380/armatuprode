@@ -130,9 +130,17 @@ function AppContent() {
       params.has("next") ||
       params.has("join") ||
       params.has("ref") ||
-      params.has("payment");
+      params.has("payment") ||
+      params.has("login");
     if (!hasIntent) {
       window.location.replace("/landing");
+      return;
+    }
+    // Clean ?login marker from URL — solo era una señal de intent.
+    if (params.has("login")) {
+      params.delete("login");
+      const search = params.toString();
+      window.history.replaceState({}, "", search ? `/?${search}` : "/");
     }
   }, [authLoading, isLoggedIn]);
 

@@ -249,7 +249,7 @@ export default function LandingPage() {
             <Link href="/privacy" className="hover:text-text-primary">
               Privacidad
             </Link>
-            <Link href="/" className="hover:text-text-primary">
+            <Link href="/?login" className="hover:text-text-primary">
               Iniciar sesión
             </Link>
           </div>

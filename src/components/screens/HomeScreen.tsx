@@ -281,9 +281,11 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
       streak: stats?.streak ?? 0,
       precision: stats?.precision ?? null,
       exactos: stats?.exactos ?? 0,
-      statsLoaded: !!stats,
+      // Statsloaded: data llegó O el dashboard terminó (con o sin error). Eso
+      // evita que las cards se queden con "…" infinito si el fetch falla.
+      statsLoaded: !!stats || !dashLoading,
     };
-  }, [dbUser, stats]);
+  }, [dbUser, stats, dashLoading]);
 
   // Matches and groups: API only. No mock fallback to avoid showing fake data.
   const matches = apiMatches;
@@ -306,7 +308,14 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
     }));
   }, [apiGroups]);
 
-  const nextMatch = matches.find((m) => m.status === "upcoming" && !m.userPrediction);
+  // Primer match upcoming en tiempo (no en 'sin predecir'). Si ya hay
+  // pronóstico, el bloque muestra el score con CTA 'Editar' en vez de
+  // 'Predecir ahora'. Antes saltaba al siguiente sin predecir y dejaba al
+  // usuario sin saber "lo que viene" si ya había cargado todo el día.
+  const now = Date.now();
+  const nextMatch = matches.find(
+    (m) => m.status === "upcoming" && new Date(m.matchDateIso).getTime() > now,
+  );
   const predictedCount = matches.filter((m) => m.status === "upcoming" && m.userPrediction).length;
   const totalUpcoming = matches.filter((m) => m.status === "upcoming").length;
 
@@ -468,10 +477,20 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
 
           <button
             onClick={() => onNavigate("matches")}
-            className="w-full rounded-xl bg-primary py-3.5 font-display text-sm font-bold tracking-widest text-bg-primary transition-all hover:bg-primary/90 active:scale-[0.98]"
-            style={{ boxShadow: "0 0 24px rgba(16,185,129,0.25)" }}
+            className={`w-full rounded-xl py-3.5 font-display text-sm font-bold tracking-widest transition-all active:scale-[0.98] ${
+              nextMatch.userPrediction
+                ? "border border-primary/40 bg-primary/10 text-primary hover:bg-primary/15"
+                : "bg-primary text-bg-primary hover:bg-primary/90"
+            }`}
+            style={
+              nextMatch.userPrediction
+                ? undefined
+                : { boxShadow: "0 0 24px rgba(16,185,129,0.25)" }
+            }
           >
-            PREDECIR AHORA
+            {nextMatch.userPrediction
+              ? `Pronóstico: ${nextMatch.userPrediction.scoreA} - ${nextMatch.userPrediction.scoreB} · EDITAR`
+              : "PREDECIR AHORA"}
           </button>
 
           <div className="mt-3 text-center text-xs text-text-muted">
