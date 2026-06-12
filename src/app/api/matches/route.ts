@@ -4,6 +4,29 @@ import { getAuthUser } from "@/lib/supabase-server";
 import { rateLimit, hashSecret } from "@/lib/ratelimit";
 import { adminKeyFromRequest, isValidAdmin } from "@/lib/admin-auth";
 import { logAdminAction } from "@/lib/admin-audit";
+import { unstable_cache } from "next/cache";
+
+// Shared tournament payload (matches list + tournament meta). 30s TTL.
+// Per-user data (predictions) is fetched separately and merged below.
+// Cache invalidates naturally — when scores update, the cached shape is the
+// same; users see stale-by-up-to-30s during live matches (acceptable given
+// the 30s polling on the client side anyway).
+const getCachedTournament = unstable_cache(
+  async (tournamentIdParam: string | null) => {
+    const tournament = tournamentIdParam
+      ? await prisma.tournament.findUnique({
+          where: { id: tournamentIdParam },
+          include: { matches: { orderBy: { matchDate: "asc" } } },
+        })
+      : await prisma.tournament.findFirst({
+          where: { active: true },
+          include: { matches: { orderBy: { matchDate: "asc" } } },
+        });
+    return tournament;
+  },
+  ["matches-route-tournament"],
+  { revalidate: 30 },
+);
 
 export async function GET(request: NextRequest) {
   const { user } = await getAuthUser(request);
@@ -15,23 +38,15 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const tournamentIdParam = searchParams.get("tournamentId");
 
-  const tournament = tournamentIdParam
-    ? await prisma.tournament.findUnique({
-        where: { id: tournamentIdParam },
-        include: { matches: { orderBy: { matchDate: "asc" } } },
-      })
-    : await prisma.tournament.findFirst({
-        where: { active: true },
-        include: { matches: { orderBy: { matchDate: "asc" } } },
-      });
+  // Run cached tournament + user lookup in parallel.
+  const [tournament, dbUser] = await Promise.all([
+    getCachedTournament(tournamentIdParam),
+    prisma.user.findUnique({ where: { authId: user.id } }),
+  ]);
 
   if (!tournament) {
     return NextResponse.json({ matches: [] });
   }
-
-  const dbUser = await prisma.user.findUnique({
-    where: { authId: user.id },
-  });
 
   let predictions: Record<string, { scoreA: number; scoreB: number; points: number }> = {};
   if (dbUser) {

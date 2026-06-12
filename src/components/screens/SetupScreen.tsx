@@ -71,7 +71,13 @@ export default function SetupScreen() {
         }).catch(() => {});
       }
 
-      setScreen("main");
+      // If user arrived via deeplink with a pending join code, jump straight
+      // into the join flow instead of main. Without this, the join code is
+      // lost after Setup completes and the user has to find the link again.
+      const hasJoinCode =
+        new URLSearchParams(window.location.search).get("join") ||
+        localStorage.getItem("pendingJoinCode");
+      setScreen(hasJoinCode ? "join-group" : "main");
     } catch (err) {
       setError(`Error de conexion: ${err instanceof Error ? err.message : "desconocido"}`);
     }

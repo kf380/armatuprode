@@ -47,7 +47,7 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
   const { matches: apiMatches, loading: matchesLoading } = useMatches();
   const { groups: apiGroups, loading: groupsLoading } = useGroups();
   const { stats } = useUserStats();
-  const { matches: liveMatches } = useLiveMatches(60000);
+  const { matches: liveMatches } = useLiveMatches(90000);
   const { badges } = useUserBadges();
   const earnedBadges = useMemo(() => badges.filter((b) => b.earned), [badges]);
   const SEEN_KEY = "ap_seen_badges_v1";
@@ -132,9 +132,9 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
     return `en ${m}m`;
   }, [nextBigMatch]);
 
-  // User data from dbUser or fallback to mock
+  // User data from dbUser or fallback to mock (only during initial auth load).
   const user = useMemo(() => {
-    if (!dbUser) return mockUser;
+    if (!dbUser) return { ...mockUser, globalRank: null as number | null, precision: null as number | null, statsLoaded: false };
     const { level, levelName, xpNext } = deriveLevel(dbUser.xp);
     return {
       ...mockUser,

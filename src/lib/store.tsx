@@ -113,6 +113,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const supabase = getSupabase();
 
+    // If the user arrived via /?join=CODE or has a stored pendingJoinCode,
+    // route to the join-group flow instead of "main" once they're set up.
+    function hasPendingJoin(): boolean {
+      if (typeof window === "undefined") return false;
+      const fromUrl = new URLSearchParams(window.location.search).get("join");
+      if (fromUrl) return true;
+      return !!window.localStorage.getItem("pendingJoinCode");
+    }
+
     // Helper: given a session, fetch DB user and navigate
     async function resolveSession(session: { user: { id: string; email?: string }; access_token: string }) {
       setAuthUser(session.user as SupabaseUser);
@@ -126,7 +135,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             setDbUser(data.user);
             setCoins(data.user.coins);
             setIsLoggedIn(true);
-            setScreen("main");
+            setScreen(hasPendingJoin() ? "join-group" : "main");
           } else {
             setScreen("setup");
           }
