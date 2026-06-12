@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import WebVitalsReporter from "@/components/WebVitalsReporter";
 import AnalyticsBoot from "@/components/AnalyticsBoot";
+import PwaInstallPrompt from "@/components/PwaInstallPrompt";
 
 export const metadata: Metadata = {
   title: "ArmatuProde - Competencia Social Futbolistica",
@@ -64,6 +65,7 @@ export default function RootLayout({
         {children}
         <WebVitalsReporter />
         <AnalyticsBoot />
+        <PwaInstallPrompt />
       </body>
     </html>
   );

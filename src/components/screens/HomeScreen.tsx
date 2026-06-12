@@ -6,6 +6,7 @@ import { ChevronRight, Plus, Zap, TrendingUp, Target, Bell, ShoppingBag, Radio, 
 import XPBar from "@/components/XPBar";
 import { useApp } from "@/lib/store";
 import { useMatches, useGroups, useUserStats, useLiveMatches, useUserBadges, deriveLevel, usePlayerPremium, usePublicConfig } from "@/lib/hooks";
+import PullToRefresh from "@/components/PullToRefresh";
 import { calculatePoints } from "@/lib/scoring";
 import { Crown } from "lucide-react";
 // Mock fallbacks removed: only `currentUser` is kept as a default-shape source while the
@@ -44,11 +45,21 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
     }, 3000);
     return () => clearTimeout(timer);
   }, [authFetch]);
-  const { matches: apiMatches, loading: matchesLoading } = useMatches();
-  const { groups: apiGroups, loading: groupsLoading } = useGroups();
-  const { stats } = useUserStats();
-  const { matches: liveMatches } = useLiveMatches(90000);
-  const { badges } = useUserBadges();
+  const { matches: apiMatches, loading: matchesLoading, refetch: refetchMatches } = useMatches();
+  const { groups: apiGroups, loading: groupsLoading, refetch: refetchGroups } = useGroups();
+  const { stats, refetch: refetchStats } = useUserStats();
+  const { matches: liveMatches, refetch: refetchLive } = useLiveMatches(90000);
+  const { badges, refetch: refetchBadges } = useUserBadges();
+
+  const handlePullRefresh = async () => {
+    await Promise.all([
+      refetchMatches?.(),
+      refetchGroups?.(),
+      refetchStats?.(),
+      refetchLive?.(),
+      refetchBadges?.(),
+    ]);
+  };
   const earnedBadges = useMemo(() => badges.filter((b) => b.earned), [badges]);
   const SEEN_KEY = "ap_seen_badges_v1";
   const [unseenBadgeIds, setUnseenBadgeIds] = useState<Set<string>>(new Set());
@@ -184,6 +195,7 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
   const totalUpcoming = matches.filter((m) => m.status === "upcoming").length;
 
   return (
+    <PullToRefresh onRefresh={handlePullRefresh}>
     <motion.div
       className="space-y-6 pb-6"
       variants={stagger}
@@ -372,6 +384,25 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
                 />
               ))}
             </div>
+          ) : groups.length === 0 ? (
+            <div className="col-span-3 w-full">
+              <button
+                onClick={() => onNavigate("groups", { action: "create" })}
+                className="w-full rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/10 to-bg-surface p-6 text-center transition-all hover:border-primary/50 active:scale-[0.99]"
+              >
+                <div className="text-4xl mb-3">🏆</div>
+                <div className="font-display text-sm font-bold tracking-wider mb-1">
+                  TODAVÍA NO TENÉS GRUPO
+                </div>
+                <div className="text-xs text-text-secondary leading-relaxed max-w-xs mx-auto mb-4">
+                  Creá uno en 30 segundos y pasale el link a tus amigos por WhatsApp.
+                  El prode arranca cuando son al menos 2.
+                </div>
+                <div className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-bg-primary font-display text-xs font-bold tracking-widest">
+                  <Plus size={14} /> CREAR MI PRIMER GRUPO
+                </div>
+              </button>
+            </div>
           ) : (
             <>
               {groups.map((group) => (
@@ -401,6 +432,28 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
           )}
         </div>
       </motion.div>
+
+      {/* Streak callout — only when streak is interesting (>=2 correct) */}
+      {user.statsLoaded && user.streak >= 2 && (
+        <motion.div
+          variants={fadeUp}
+          className="rounded-2xl border border-accent/30 bg-gradient-to-r from-accent/10 to-accent/5 p-3 flex items-center gap-3"
+        >
+          <span className="text-2xl animate-fire">🔥</span>
+          <div className="flex-1">
+            <div className="font-display text-xs font-bold text-accent tracking-wider">
+              ¡{user.streak} {user.streak === 1 ? "ACIERTO" : "ACIERTOS"} SEGUIDO{user.streak === 1 ? "" : "S"}!
+            </div>
+            <div className="text-[11px] text-text-secondary mt-0.5">
+              {user.streak >= 5
+                ? "Estás imparable. Cargá la próxima y rompé tu récord."
+                : user.streak >= 3
+                ? "No la cortes. Próximo partido te espera."
+                : "Vas en racha. Mantenela con el próximo pronóstico."}
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {/* Countdown banner — only shown when no live match is taking the slot */}
       {nextBigMatch && countdownLabel && (
@@ -620,5 +673,6 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
         </div>
       </motion.div>
     </motion.div>
+    </PullToRefresh>
   );
 }
