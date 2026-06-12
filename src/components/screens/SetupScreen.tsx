@@ -2,7 +2,23 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
+import { LogOut } from "lucide-react";
 import { useApp } from "@/lib/store";
+
+// Take "Tamara Gelber Bauman" → "Tamara Gelber", "Kevin" → "Kevin".
+// Avoids the 20-char truncation that produced ugly cut-offs.
+function prefillName(full: string): string {
+  const trimmed = full.trim();
+  if (trimmed.length <= 20) return trimmed;
+  const parts = trimmed.split(/\s+/);
+  if (parts.length <= 1) return parts[0].slice(0, 20);
+  // Try first + last; if still long, fall back to first.
+  const firstAndLast = `${parts[0]} ${parts[parts.length - 1]}`;
+  if (firstAndLast.length <= 20) return firstAndLast;
+  const firstTwo = parts.slice(0, 2).join(" ");
+  if (firstTwo.length <= 20) return firstTwo;
+  return parts[0].slice(0, 20);
+}
 
 const avatars = ["🎮", "⚽", "🏆", "🔥", "⚡", "🎯", "👑", "🦁", "🐺", "🦅", "🎲", "💎"];
 const countries = [
@@ -19,16 +35,27 @@ const countries = [
 ];
 
 export default function SetupScreen() {
-  const { setScreen, setIsLoggedIn, setDbUser, authFetch, authUser } = useApp();
+  const { setScreen, setIsLoggedIn, setDbUser, authFetch, authUser, signOut } = useApp();
   const [name, setName] = useState(() => {
     const meta = authUser?.user_metadata as { full_name?: string; name?: string } | undefined;
     const fromGoogle = (meta?.full_name ?? meta?.name ?? "").trim();
-    return fromGoogle.slice(0, 20);
+    return prefillName(fromGoogle);
   });
   const [avatar, setAvatar] = useState("🎮");
   const [country, setCountry] = useState("🇦🇷");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [errorActionHref, setErrorActionHref] = useState<null | "switch-account">(null);
+  const [switching, setSwitching] = useState(false);
+
+  const handleSwitchAccount = async () => {
+    setSwitching(true);
+    try {
+      await signOut();
+    } catch {
+      // signOut already navigates to login on best-effort
+    }
+  };
 
   const canContinue = name.trim().length >= 2;
   const selectedCountry = countries.find((c) => c.flag === country);
@@ -52,7 +79,14 @@ export default function SetupScreen() {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || `Error ${res.status} al crear perfil`);
+        // 409 = email taken by another auth identity. Offer "switch account".
+        if (res.status === 409) {
+          setError(data.error || "Ese email ya está en uso con otra cuenta.");
+          setErrorActionHref("switch-account");
+        } else {
+          setError(data.error || `No pudimos crear tu perfil. Intentá de nuevo en un segundo.`);
+          setErrorActionHref(null);
+        }
         setLoading(false);
         return;
       }
@@ -92,19 +126,32 @@ export default function SetupScreen() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
       >
-        {/* Step indicator */}
-        <div className="flex items-center gap-2 mb-8">
-          <div className="h-1 flex-1 rounded-full bg-primary" />
-          <div className="h-1 flex-1 rounded-full bg-primary" />
-          <div className="h-1 flex-1 rounded-full bg-border-default" />
+        {/* Header with switch-account escape */}
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="font-display text-xl font-bold tracking-widest">ARMÁ TU PERFIL</h1>
+          <button
+            onClick={handleSwitchAccount}
+            disabled={switching}
+            className="flex items-center gap-1 text-[11px] text-text-muted hover:text-text-primary transition-colors disabled:opacity-50"
+            title="Cerrar sesión y volver al login"
+          >
+            <LogOut size={11} />
+            <span>{switching ? "Cerrando…" : "Cuenta equivocada"}</span>
+          </button>
         </div>
-
-        <h1 className="font-display text-xl font-bold tracking-widest mb-1">ARMA TU PERFIL</h1>
-        <p className="text-sm text-text-secondary mb-8">Elegí como te van a ver los demas</p>
+        <p className="text-sm text-text-secondary mb-8">Elegí cómo te van a ver tus amigos en el prode.</p>
 
         {error && (
           <div className="mb-6 rounded-xl bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-400">
-            {error}
+            <div>{error}</div>
+            {errorActionHref === "switch-account" && (
+              <button
+                onClick={handleSwitchAccount}
+                className="mt-2 inline-flex items-center gap-1 rounded-lg bg-red-500/20 px-3 py-1.5 text-xs font-bold text-red-300 hover:bg-red-500/30 transition-colors"
+              >
+                <LogOut size={11} /> Iniciar sesión con otra cuenta
+              </button>
+            )}
           </div>
         )}
 
@@ -147,7 +194,7 @@ export default function SetupScreen() {
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Como te llamas?"
+            placeholder="¿Cómo te llamás?"
             maxLength={20}
             className="w-full rounded-2xl border border-border-default bg-bg-surface px-5 py-4 text-base text-text-primary placeholder:text-text-muted focus:border-primary/50 focus:outline-none transition-colors"
           />
@@ -157,7 +204,7 @@ export default function SetupScreen() {
         {/* Country */}
         <div className="mb-10">
           <label className="text-xs font-display tracking-widest text-text-muted mb-3 block">
-            PAIS
+            PAÍS
           </label>
           <div className="grid grid-cols-5 gap-2">
             {countries.map((c) => (

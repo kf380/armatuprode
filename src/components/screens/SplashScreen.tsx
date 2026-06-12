@@ -140,6 +140,19 @@ export default function SplashScreen() {
         >
           Predecí &middot; Competí &middot; Ganá
         </motion.p>
+
+        {/* Auth status: surface that the OAuth roundtrip is in flight so
+            users don't think the app is frozen. */}
+        {authLoading && (
+          <motion.p
+            className="mt-6 text-[11px] text-text-muted tracking-wider"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.6, duration: 0.4 }}
+          >
+            Verificando sesión…
+          </motion.p>
+        )}
       </motion.div>
 
       {/* Subtle bottom decoration */}

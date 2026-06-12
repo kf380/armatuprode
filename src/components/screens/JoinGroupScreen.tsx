@@ -64,8 +64,12 @@ export default function JoinGroupScreen() {
 
   useEffect(() => {
     if (!inviteCode) {
-      setScreen("main");
-      return;
+      // Brief message before redirecting so the user understands they didn't
+      // arrive here by accident — link is just expired/invalid.
+      setError("Link de invitación inválido o expirado.");
+      setLoading(false);
+      const t = setTimeout(() => setScreen("main"), 2200);
+      return () => clearTimeout(t);
     }
 
     if (typeof window !== "undefined" && window.location.search.includes("join=")) {

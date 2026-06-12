@@ -54,7 +54,18 @@ export async function GET(request: Request) {
     if (!error) {
       return response;
     }
+    console.warn("auth_callback_exchange_failed", {
+      message: error.message,
+      next,
+    });
+  } else {
+    console.warn("auth_callback_missing_code", { next });
   }
 
-  return NextResponse.redirect(`${origin}/?error=auth`);
+  // Preserve `next` so a retry from LoginScreen can resume the original
+  // destination (e.g. /?join=ABC). The error param surfaces to the user.
+  const retry = next === "/" ? "/" : `/?next=${encodeURIComponent(next)}`;
+  const url = new URL(retry, origin);
+  url.searchParams.set("error", "auth");
+  return NextResponse.redirect(url.toString());
 }

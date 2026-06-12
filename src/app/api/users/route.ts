@@ -65,7 +65,11 @@ export async function POST(request: NextRequest) {
     const userCount = await prisma.user.count();
     if (userCount >= limits.maxPublicUsers()) {
       return NextResponse.json(
-        { error: "Estamos en beta cerrada. Pedí tu invitación a hola@armatuprode.com.ar." },
+        {
+          error: "Tenemos un problema técnico para crear tu cuenta. Escribinos y te ayudamos enseguida.",
+          contactEmail: "hola@armatuprode.com.ar",
+          contactWhatsapp: "https://wa.me/?text=Hola%20Armatuprode%2C%20no%20puedo%20crear%20mi%20cuenta",
+        },
         { status: 403 },
       );
     }
