@@ -256,9 +256,49 @@ export interface DashboardPayload {
  * round-trip. Use this in HomeScreen instead of useMatches/useGroups/...
  * — keeps the others available for screens that don't need everything.
  */
+/**
+ * Stale-while-revalidate cache for the dashboard. On mount:
+ *   1. Reads last response from localStorage and shows it instantly (≤1ms).
+ *   2. Fires a fresh fetch in background and swaps when it arrives.
+ *   3. Persists the new response for the next visit.
+ * The user never sees "…" infinito on warm sessions because there's always
+ * something to render.
+ */
+const DASHBOARD_CACHE_KEY = "ap_dashboard_cache_v1";
+const DASHBOARD_CACHE_TTL = 24 * 60 * 60 * 1000; // 24h — older snapshots get discarded
+
+type DashboardCacheEntry = { ts: number; userId: string | null; data: DashboardPayload };
+
+function readDashboardCache(currentUserId: string | null): DashboardPayload | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(DASHBOARD_CACHE_KEY);
+    if (!raw) return null;
+    const entry: DashboardCacheEntry = JSON.parse(raw);
+    if (Date.now() - entry.ts > DASHBOARD_CACHE_TTL) return null;
+    // If the cached snapshot belongs to a different user, ignore it.
+    if (currentUserId && entry.userId && entry.userId !== currentUserId) return null;
+    return entry.data;
+  } catch {
+    return null;
+  }
+}
+
+function writeDashboardCache(userId: string | null, data: DashboardPayload): void {
+  if (typeof window === "undefined") return;
+  try {
+    const entry: DashboardCacheEntry = { ts: Date.now(), userId, data };
+    window.localStorage.setItem(DASHBOARD_CACHE_KEY, JSON.stringify(entry));
+  } catch {
+    /* quota / serialization — ignore, no-op */
+  }
+}
+
 export function useDashboard() {
-  const { authFetch } = useApp();
-  const [data, setData] = useState<DashboardPayload | null>(null);
+  const { authFetch, dbUser } = useApp();
+  const userId = dbUser?.id ?? null;
+  // Initial state seeded from localStorage so first paint shows real data.
+  const [data, setData] = useState<DashboardPayload | null>(() => readDashboardCache(userId));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const fetchedRef = useRef(false);
@@ -271,12 +311,13 @@ export function useDashboard() {
       const payload: DashboardPayload = await res.json();
       setData(payload);
       setError(null);
+      writeDashboardCache(userId, payload);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
     } finally {
       setLoading(false);
     }
-  }, [authFetch]);
+  }, [authFetch, userId]);
 
   useEffect(() => {
     if (!fetchedRef.current) {
