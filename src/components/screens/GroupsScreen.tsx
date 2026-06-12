@@ -6,7 +6,7 @@ import { Plus, Share2, Copy, ChevronLeft, MessageCircle, Trophy, BarChart3, Chec
 import { useApp } from "@/lib/store";
 import { useGroups, useGroupDetail, useGroupActivity, useGroupChat, usePublicConfig } from "@/lib/hooks";
 import { STICKERS_BY_CATEGORY, type Sticker } from "@/lib/stickers";
-import { getGroupInviteContent, getRankingContent, shareGroupInvite } from "@/lib/share";
+import { getGroupInviteContent, getRankingContent, getRankingDayContent, shareGroupInvite } from "@/lib/share";
 import ShareButton from "@/components/ShareButton";
 import Link from "next/link";
 
@@ -573,6 +573,40 @@ export default function GroupsScreen() {
               );
             })}
           </motion.div>
+          {/* Share-to-WA del ranking del día — botón prominent */}
+          {ranking.length > 0 && dbUser && (() => {
+            const myEntry = ranking.find((r) => r.userId === dbUser.id);
+            const myPosition = myEntry ? ranking.indexOf(myEntry) + 1 : ranking.length;
+            const myPoints = myEntry?.points ?? 0;
+            const months = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+            const dateLabel = rankingDate
+              ? (() => {
+                  const [, m, day] = rankingDate.split("-").map(Number);
+                  return `del ${day} ${months[m - 1]}`;
+                })()
+              : null;
+            const groupName = detail?.group.name ?? "mi grupo";
+            const inviteUrl = detail?.group.inviteCode
+              ? `https://armatuprode.com.ar/join/${detail.group.inviteCode}`
+              : null;
+            return (
+              <div className="pt-1">
+                <ShareButton
+                  content={getRankingDayContent({
+                    groupName,
+                    myPosition,
+                    myPoints,
+                    topThree: ranking.slice(0, 3).map((r) => ({ name: r.name, points: r.points })),
+                    totalPlayers: ranking.length,
+                    dateLabel,
+                    inviteUrl,
+                  })}
+                  variant="primary"
+                  label={dateLabel ? `Compartir ranking ${dateLabel}` : "Compartir mi ranking"}
+                />
+              </div>
+            );
+          })()}
           </>
         )}
 

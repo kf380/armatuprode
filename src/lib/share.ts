@@ -72,6 +72,36 @@ export function getRankingContent(name: string, position: number, groupName?: st
   };
 }
 
+export interface RankingShareInput {
+  groupName: string;
+  myPosition: number;
+  myPoints: number;
+  topThree: Array<{ name: string; points: number }>;
+  totalPlayers: number;
+  dateLabel?: string | null;
+  inviteUrl?: string | null;
+}
+
+export function getRankingDayContent(input: RankingShareInput): ShareContent {
+  const podio = input.topThree
+    .map((p, i) => {
+      const medal = ["🥇", "🥈", "🥉"][i] ?? "•";
+      return `${medal} ${p.name} — ${p.points} pts`;
+    })
+    .join("\n");
+
+  const header = input.dateLabel
+    ? `🏆 Ranking ${input.dateLabel} de ${input.groupName}`
+    : `🏆 Ranking de ${input.groupName}`;
+  const myLine = `\nVoy #${input.myPosition} de ${input.totalPlayers} con ${input.myPoints} pts.`;
+  const tail = `\n\nArmá tu prode 👉`;
+
+  return {
+    text: `${header}\n\n${podio}${myLine}${tail}`,
+    url: input.inviteUrl ?? APP_URL,
+  };
+}
+
 // Legacy wrappers for backward compat (deprecated — use ShareMenu instead)
 export async function triggerShare(content: ShareContent): Promise<"shared" | "copied" | "whatsapp"> {
   const fullText = content.url ? `${content.text}\n${content.url}` : content.text;

@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { ChevronRight, Plus, Zap, TrendingUp, Target, Bell, ShoppingBag, Radio, Coins, Loader2, CalendarClock } from "lucide-react";
 import XPBar from "@/components/XPBar";
 import { useApp } from "@/lib/store";
-import { useMatches, useGroups, useUserStats, useLiveMatches, deriveLevel, usePlayerPremium, usePublicConfig } from "@/lib/hooks";
+import { useMatches, useGroups, useUserStats, useLiveMatches, useUserBadges, deriveLevel, usePlayerPremium, usePublicConfig } from "@/lib/hooks";
 import { calculatePoints } from "@/lib/scoring";
 import { Crown } from "lucide-react";
 // Mock fallbacks removed: only `currentUser` is kept as a default-shape source while the
@@ -48,6 +48,22 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
   const { groups: apiGroups, loading: groupsLoading } = useGroups();
   const { stats } = useUserStats();
   const { matches: liveMatches } = useLiveMatches(60000);
+  const { badges } = useUserBadges();
+  const earnedBadges = useMemo(() => badges.filter((b) => b.earned), [badges]);
+  const SEEN_KEY = "ap_seen_badges_v1";
+  const [unseenBadgeIds, setUnseenBadgeIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (typeof window === "undefined" || earnedBadges.length === 0) return;
+    const seen = new Set((window.localStorage.getItem(SEEN_KEY) || "").split(",").filter(Boolean));
+    const unseen = new Set(earnedBadges.filter((b) => !seen.has(b.id)).map((b) => b.id));
+    setUnseenBadgeIds(unseen);
+  }, [earnedBadges]);
+  const markBadgesSeen = () => {
+    if (typeof window === "undefined") return;
+    const all = earnedBadges.map((b) => b.id).join(",");
+    window.localStorage.setItem(SEEN_KEY, all);
+    setUnseenBadgeIds(new Set());
+  };
 
   // Confetti when a match the user predicted just transitioned LIVE → FINISHED
   // with points. Uses a ref so the previous snapshot is per-render-cycle, not
@@ -473,6 +489,54 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
               </div>
             </button>
           ))}
+        </motion.div>
+      )}
+
+      {/* Logros del user — solo se muestra si tiene al menos 1 badge ganado */}
+      {earnedBadges.length > 0 && (
+        <motion.div variants={fadeUp} className="rounded-2xl border border-border-default bg-bg-surface p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="font-display text-xs font-bold tracking-widest text-text-secondary">
+              TUS LOGROS{unseenBadgeIds.size > 0 && (
+                <span className="ml-2 inline-block rounded-full bg-accent/20 border border-accent/40 text-accent px-1.5 py-0.5 text-[9px]">
+                  +{unseenBadgeIds.size} NUEVO{unseenBadgeIds.size > 1 ? "S" : ""}
+                </span>
+              )}
+            </div>
+            {unseenBadgeIds.size > 0 && (
+              <button onClick={markBadgesSeen} className="text-[10px] text-text-muted hover:text-text-primary">
+                marcar visto
+              </button>
+            )}
+          </div>
+          <div className="flex gap-3 flex-wrap">
+            {earnedBadges.slice(0, 6).map((b) => {
+              const isNew = unseenBadgeIds.has(b.id);
+              return (
+                <div
+                  key={b.id}
+                  className={`relative flex flex-col items-center w-[68px] text-center ${isNew ? "" : ""}`}
+                  title={b.description}
+                >
+                  <motion.div
+                    initial={isNew ? { scale: 0.6 } : false}
+                    animate={isNew ? { scale: [1, 1.1, 1] } : {}}
+                    transition={isNew ? { duration: 1.2, repeat: Infinity } : undefined}
+                    className={`h-12 w-12 rounded-full flex items-center justify-center text-2xl ${
+                      isNew
+                        ? "bg-gradient-to-br from-accent/30 to-accent/10 border border-accent/50 shadow-[0_0_15px_rgba(245,184,46,0.4)]"
+                        : "bg-bg-primary border border-border-default"
+                    }`}
+                  >
+                    {b.icon}
+                  </motion.div>
+                  <div className="text-[9px] mt-1 leading-tight font-display tracking-wider">
+                    {b.name}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </motion.div>
       )}
 
