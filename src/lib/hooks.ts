@@ -247,7 +247,7 @@ export interface DashboardPayload {
   tournament: { id: string; name: string; type: string; slug: string } | null;
   matches: ApiMatch[];
   liveMatches: LiveMatch[];
-  groups: Array<{ id: string; name: string; emoji: string; inviteCode: string; memberCount: number }>;
+  groups: ApiGroup[];
   badges: Array<{ id: string; earnedAt: string }>;
 }
 

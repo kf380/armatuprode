@@ -84,12 +84,29 @@ export async function GET(request: NextRequest) {
     prisma.groupMember.findMany({
       where: { userId: dbUser.id },
       select: {
+        role: true,
         group: {
           select: {
             id: true,
             name: true,
             emoji: true,
             inviteCode: true,
+            createdById: true,
+            hasPool: true,
+            entryFee: true,
+            currency: true,
+            type: true,
+            planType: true,
+            status: true,
+            isPremium: true,
+            participantLimit: true,
+            prizeType: true,
+            prizeDescription: true,
+            rulesDescription: true,
+            publicJoinEnabled: true,
+            brandingConfig: true,
+            tournament: { select: { name: true } },
+            organization: { select: { name: true, logoUrl: true, slug: true } },
             _count: { select: { members: true } },
           },
         },
@@ -133,17 +150,25 @@ export async function GET(request: NextRequest) {
 
   const liveMatches = matches
     .filter((m) => m.status === "LIVE")
-    .map((m) => ({
-      id: m.id,
-      teamAFlag: m.teamAFlag,
-      teamACode: m.teamACode,
-      teamBFlag: m.teamBFlag,
-      teamBCode: m.teamBCode,
-      scoreA: m.scoreA,
-      scoreB: m.scoreB,
-      minute: m.minute,
-      period: m.period,
-    }));
+    .map((m) => {
+      const p = predictionsByMatch.get(m.id);
+      return {
+        id: m.id,
+        teamACode: m.teamACode,
+        teamAName: m.teamAName,
+        teamAFlag: m.teamAFlag,
+        teamBCode: m.teamBCode,
+        teamBName: m.teamBName,
+        teamBFlag: m.teamBFlag,
+        scoreA: m.scoreA,
+        scoreB: m.scoreB,
+        minute: m.minute,
+        period: m.period,
+        matchGroup: m.matchGroup,
+        phase: m.phase,
+        userPrediction: p ? { scoreA: p.scoreA, scoreB: p.scoreB } : null,
+      };
+    });
 
   return NextResponse.json({
     stats: {
@@ -186,8 +211,25 @@ export async function GET(request: NextRequest) {
       id: m.group.id,
       name: m.group.name,
       emoji: m.group.emoji,
-      inviteCode: m.group.inviteCode,
+      tournament: m.group.tournament.name,
       memberCount: m.group._count.members,
+      role: m.role,
+      hasPool: m.group.hasPool,
+      entryFee: m.group.entryFee,
+      currency: m.group.currency,
+      inviteCode: m.group.inviteCode,
+      createdById: m.group.createdById,
+      type: m.group.type,
+      planType: m.group.planType,
+      status: m.group.status,
+      isPremium: m.group.isPremium,
+      participantLimit: m.group.participantLimit,
+      prizeType: m.group.prizeType,
+      prizeDescription: m.group.prizeDescription,
+      rulesDescription: m.group.rulesDescription,
+      publicJoinEnabled: m.group.publicJoinEnabled,
+      brandingConfig: m.group.brandingConfig,
+      organization: m.group.organization,
     })),
     badges: badges.map((b) => ({ id: b.badgeId, earnedAt: b.earnedAt.toISOString() })),
   });

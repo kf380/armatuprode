@@ -177,8 +177,8 @@ export default function MatchesScreen() {
       const live = match.status === "live";
       setLockedToast(
         live
-          ? "El partido está en vivo. Mirá el resultado, no se puede cambiar el pronóstico."
-          : "Este partido ya empezó. Tu pronóstico quedó cerrado.",
+          ? "Ya rueda la pelota. Mirá el partido, el pronóstico quedó cerrado."
+          : "Llegaste tarde, hermano. Este ya está cerrado.",
       );
       return;
     }

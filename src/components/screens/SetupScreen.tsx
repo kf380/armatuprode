@@ -20,7 +20,7 @@ function prefillName(full: string): string {
   return parts[0].slice(0, 20);
 }
 
-const avatars = ["🎮", "⚽", "🏆", "🔥", "⚡", "🎯", "👑", "🦁", "🐺", "🦅", "🎲", "💎"];
+const avatars = ["⚽", "🏆", "🔥", "🧉", "🥩", "🪁", "🥅", "🎯", "👑", "🦁", "🦅", "💎"];
 const countries = [
   { flag: "🇦🇷", name: "Argentina" },
   { flag: "🇧🇷", name: "Brasil" },

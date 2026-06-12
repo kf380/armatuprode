@@ -1,11 +1,13 @@
 "use client";
 
 import { useMemo, useEffect, useRef, useState } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { ChevronRight, Plus, Zap, TrendingUp, Target, Bell, ShoppingBag, Radio, Coins, Loader2, CalendarClock } from "lucide-react";
 import XPBar from "@/components/XPBar";
 import { useApp } from "@/lib/store";
-import { useMatches, useGroups, useUserStats, useLiveMatches, useUserBadges, deriveLevel, usePublicConfig } from "@/lib/hooks";
+import { useDashboard, useLiveMatches, deriveLevel, usePublicConfig } from "@/lib/hooks";
+import type { ScreenMatch } from "@/lib/hooks";
+import { isArgentinaMatch, findNextArgentina, ARGENTINA_COLORS } from "@/lib/argentina-mode";
 import PullToRefresh from "@/components/PullToRefresh";
 import { calculatePoints } from "@/lib/scoring";
 // Mock fallbacks removed: only `currentUser` is kept as a default-shape source while the
@@ -43,20 +45,76 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
     }, 3000);
     return () => clearTimeout(timer);
   }, [authFetch]);
-  const { matches: apiMatches, loading: matchesLoading, refetch: refetchMatches } = useMatches();
-  const { groups: apiGroups, loading: groupsLoading, refetch: refetchGroups } = useGroups();
-  const { stats, refetch: refetchStats } = useUserStats();
-  const { matches: liveMatches, refetch: refetchLive } = useLiveMatches(90000);
-  const { badges, refetch: refetchBadges } = useUserBadges();
+  // Single round-trip: stats + matches + groups + liveMatches + badges agregados.
+  // Reemplaza 5 fetches concurrentes anteriores que tardaban en frío.
+  const { data: dash, loading: dashLoading, refetch: refetchDash } = useDashboard();
+  // Live polling cada 90s para el banner LIVE. Se mantiene separado del dashboard
+  // porque tiene cadencia propia más agresiva.
+  const { matches: livePolled, refetch: refetchLive } = useLiveMatches(90000);
+
+  // Helper para mapear dashboard.matches (raw API shape) al ScreenMatch que
+  // espera el resto del componente (lowercase status + formatted time).
+  const apiToScreen = (m: NonNullable<typeof dash>["matches"][number]): ScreenMatch => {
+    const d = new Date(m.matchDate);
+    const time = d.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Argentina/Buenos_Aires", hour12: false });
+    return {
+      id: m.id,
+      officialMatchNumber: m.officialMatchNumber,
+      teamA: { code: m.teamACode, name: m.teamAName, flag: m.teamAFlag },
+      teamB: { code: m.teamBCode, name: m.teamBName, flag: m.teamBFlag },
+      date: m.matchDate.toString().slice(0, 10),
+      matchDateIso: m.matchDate as unknown as string,
+      time,
+      group: m.matchGroup || m.phase,
+      phase: m.phase,
+      status: m.status === "UPCOMING" ? "upcoming" : m.status === "FINISHED" ? "finished" : "live",
+      scoreA: m.scoreA ?? undefined,
+      scoreB: m.scoreB ?? undefined,
+      qualifiedTeam: m.qualifiedTeam ?? undefined,
+      userPrediction: m.prediction
+        ? { scoreA: m.prediction.scoreA, scoreB: m.prediction.scoreB, predictedQualifier: m.prediction.predictedQualifier ?? undefined }
+        : null,
+      pointsEarned: m.prediction?.points,
+    };
+  };
+
+  const apiMatches = useMemo(
+    () => (dash?.matches ?? []).map(apiToScreen),
+    [dash],
+  );
+  const apiGroups = dash?.groups ?? [];
+  const stats = dash?.stats ?? null;
+  // Prefer live polled (más fresco). Fallback a dashboard's snapshot mientras
+  // useLiveMatches no termina su primer fetch.
+  const liveMatches = livePolled.length > 0 ? livePolled : (dash?.liveMatches ?? []);
+  // Mini-catálogo cliente para resolver icon + name de cada badge sin pegar al
+  // server. Si en el futuro agregamos badges nuevos, sumar la entry acá.
+  const BADGE_CATALOG: Record<string, { icon: string; name: string; description: string }> = {
+    francotirador: { icon: "🎯", name: "Francotirador", description: "5 resultados exactos" },
+    en_racha: { icon: "🔥", name: "En racha", description: "5 aciertos seguidos" },
+    visionario: { icon: "🔮", name: "Visionario", description: "10 ganadores correctos" },
+    fiel: { icon: "📅", name: "Fiel", description: "Predijo todos los partidos de una fase" },
+    organizador: { icon: "👑", name: "Organizador", description: "Creó un grupo" },
+    sociable: { icon: "🤝", name: "Sociable", description: "Está en 3 grupos" },
+  };
+  const badges = useMemo(
+    () =>
+      (dash?.badges ?? []).map((b) => ({
+        id: b.id,
+        icon: BADGE_CATALOG[b.id]?.icon ?? "🏅",
+        name: BADGE_CATALOG[b.id]?.name ?? b.id,
+        description: BADGE_CATALOG[b.id]?.description ?? "",
+        earned: true,
+        progress: 1,
+        target: 1,
+      })),
+    [dash],
+  );
+  const matchesLoading = dashLoading && !dash;
+  const groupsLoading = dashLoading && !dash;
 
   const handlePullRefresh = async () => {
-    await Promise.all([
-      refetchMatches?.(),
-      refetchGroups?.(),
-      refetchStats?.(),
-      refetchLive?.(),
-      refetchBadges?.(),
-    ]);
+    await Promise.all([refetchDash?.(), refetchLive?.()]);
   };
   const earnedBadges = useMemo(() => badges.filter((b) => b.earned), [badges]);
   const SEEN_KEY = "ap_seen_badges_v1";
@@ -75,9 +133,9 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
   };
 
   // Confetti when a match the user predicted just transitioned LIVE → FINISHED
-  // with points. Uses a ref so the previous snapshot is per-render-cycle, not
-  // per-component-instance (works with the 30s polling inside useMatches).
+  // with points. Argentina-specific celebration: celeste + blanco + big banner.
   const prevMatchStatusesRef = useRef<Record<string, string>>({});
+  const [argentinaGoooolFor, setArgentinaGoooolFor] = useState<string | null>(null);
   useEffect(() => {
     let celebrated = false;
     for (const m of apiMatches) {
@@ -86,11 +144,28 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
       const acertaste = (m.pointsEarned ?? 0) > 0 && !!m.userPrediction;
       if (justFinished && acertaste && !celebrated) {
         celebrated = true;
+        const isArg = isArgentinaMatch(m);
+        const isExact =
+          m.userPrediction && m.scoreA != null && m.scoreB != null
+            ? m.userPrediction.scoreA === m.scoreA && m.userPrediction.scoreB === m.scoreB
+            : false;
+        const colors = isArg
+          ? [ARGENTINA_COLORS.celeste, ARGENTINA_COLORS.white, ARGENTINA_COLORS.amarillo]
+          : ["#10B981", "#F5B82E", "#FAFAF7"];
         import("canvas-confetti").then(({ default: confetti }) => {
-          confetti({ particleCount: 120, spread: 70, origin: { y: 0.6 }, colors: ["#10B981", "#F5B82E", "#FAFAF7"] });
-          setTimeout(() => confetti({ particleCount: 60, spread: 100, origin: { y: 0.7 } }), 250);
+          confetti({ particleCount: 140, spread: 70, origin: { y: 0.6 }, colors });
+          setTimeout(() => confetti({ particleCount: 80, spread: 100, origin: { y: 0.7 }, colors }), 250);
+          if (isArg && isExact) {
+            // Triple burst from sides for Argentina-exact
+            setTimeout(() => confetti({ particleCount: 100, angle: 60, spread: 55, origin: { x: 0, y: 0.7 }, colors }), 500);
+            setTimeout(() => confetti({ particleCount: 100, angle: 120, spread: 55, origin: { x: 1, y: 0.7 }, colors }), 500);
+          }
         }).catch(() => {});
-        void import("@/lib/sound-fx").then((m) => m.playWinFanfare()).catch(() => {});
+        void import("@/lib/sound-fx").then((mod) => mod.playWinFanfare()).catch(() => {});
+        if (isArg && isExact) {
+          setArgentinaGoooolFor(m.id);
+          setTimeout(() => setArgentinaGoooolFor(null), 2500);
+        }
       }
       prevMatchStatusesRef.current[m.id] = m.status;
     }
@@ -111,22 +186,26 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
   const nextBigMatch = useMemo(() => {
     if (liveMatches.length > 0) return null;
     const now = Date.now();
-    const horizonArg = now + 7 * 86_400_000;
     const horizonGeneric = now + 2 * 86_400_000;
+    const nextArg = findNextArgentina(apiMatches);
+    if (nextArg) {
+      return { m: nextArg, kickoff: new Date(nextArg.matchDateIso).getTime() };
+    }
     const upcoming = apiMatches
       .filter((m) => m.status === "upcoming")
       .map((m) => ({ m, kickoff: new Date(m.matchDateIso).getTime() }))
       .filter((x) => x.kickoff > now)
       .sort((a, b) => a.kickoff - b.kickoff);
-    const argentina = upcoming.find(
-      (x) =>
-        x.kickoff < horizonArg &&
-        (/argentina/i.test(x.m.teamA.name) || /argentina/i.test(x.m.teamB.name)),
-    );
-    if (argentina) return argentina;
     const generic = upcoming.find((x) => x.kickoff < horizonGeneric);
     return generic ?? null;
   }, [apiMatches, liveMatches.length]);
+
+  // Is the upcoming banner showing an Argentina match? Switches color palette
+  // to celeste + blanco. Activates ~24h before kickoff.
+  const isArgentinaUpcoming = useMemo(() => {
+    if (!nextBigMatch) return false;
+    return isArgentinaMatch(nextBigMatch.m);
+  }, [nextBigMatch]);
 
   const countdownLabel = useMemo(() => {
     if (!nextBigMatch) return null;
@@ -194,6 +273,33 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
 
   return (
     <PullToRefresh onRefresh={handlePullRefresh}>
+    {/* GOOOOOL full-screen overlay para Argentina + exacto */}
+    <AnimatePresence>
+      {argentinaGoooolFor && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[80] flex items-center justify-center pointer-events-none"
+          style={{ background: `radial-gradient(circle at center, ${ARGENTINA_COLORS.celeste}40 0%, transparent 60%)` }}
+        >
+          <motion.div
+            initial={{ scale: 0.4, rotate: -8 }}
+            animate={{ scale: [0.4, 1.2, 1], rotate: [-8, 4, 0] }}
+            transition={{ duration: 0.6, ease: "backOut" }}
+            className="font-display font-extrabold tracking-tight text-center"
+            style={{
+              fontSize: "clamp(72px, 18vw, 180px)",
+              color: ARGENTINA_COLORS.white,
+              textShadow: `0 0 30px ${ARGENTINA_COLORS.celeste}, 0 0 60px ${ARGENTINA_COLORS.celeste}80, 0 6px 20px rgba(0,0,0,0.5)`,
+              WebkitTextStroke: `2px ${ARGENTINA_COLORS.celeste}`,
+            }}
+          >
+            ¡GOOOOOL!
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
     <motion.div
       className="space-y-6 pb-6"
       variants={stagger}
@@ -366,14 +472,14 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
               >
                 <div className="text-4xl mb-3">🏆</div>
                 <div className="font-display text-sm font-bold tracking-wider mb-1">
-                  TODAVÍA NO TENÉS GRUPO
+                  ARMÁ LA BARRA
                 </div>
                 <div className="text-xs text-text-secondary leading-relaxed max-w-xs mx-auto mb-4">
-                  Creá uno en 30 segundos y pasale el link a tus amigos por WhatsApp.
-                  El prode arranca cuando son al menos 2.
+                  Creá tu prode en 30 segundos y traé a los pibes por WhatsApp.
+                  Con 2 ya picás.
                 </div>
                 <div className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-bg-primary font-display text-xs font-bold tracking-widest">
-                  <Plus size={14} /> CREAR MI PRIMER GRUPO
+                  <Plus size={14} /> CREAR MI PRODE
                 </div>
               </button>
             </div>
@@ -416,35 +522,46 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
           <span className="text-2xl animate-fire">🔥</span>
           <div className="flex-1">
             <div className="font-display text-xs font-bold text-accent tracking-wider">
-              ¡{user.streak} {user.streak === 1 ? "ACIERTO" : "ACIERTOS"} SEGUIDO{user.streak === 1 ? "" : "S"}!
+              {user.streak >= 5 ? `¡VOLÁS! ${user.streak} BOMBAZOS SEGUIDOS` : `¡${user.streak} BOMBAZO${user.streak === 1 ? "" : "S"} SEGUIDO${user.streak === 1 ? "" : "S"}!`}
             </div>
             <div className="text-[11px] text-text-secondary mt-0.5">
               {user.streak >= 5
-                ? "Estás imparable. Cargá la próxima y rompé tu récord."
+                ? "Imparable. Levantala que está caliente."
                 : user.streak >= 3
-                ? "No la cortes. Próximo partido te espera."
-                : "Vas en racha. Mantenela con el próximo pronóstico."}
+                ? "No la cortes, hermano. Próximo partido te espera."
+                : "Vas con manija. Mantenela con la próxima."}
             </div>
           </div>
         </motion.div>
       )}
 
-      {/* Countdown banner — only shown when no live match is taking the slot */}
+      {/* Countdown banner — only shown when no live match is taking the slot.
+          When Argentina is the next match, palette switches to celeste/blanco. */}
       {nextBigMatch && countdownLabel && (
         <motion.div variants={fadeUp}>
           <button
             onClick={() => setActiveTab("matches")}
-            className="w-full rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/5 via-bg-surface to-primary/5 p-4 flex items-center gap-4 transition-all hover:border-primary/40 active:scale-[0.99] mb-2 text-left"
+            className={`w-full rounded-2xl p-4 flex items-center gap-4 transition-all active:scale-[0.99] mb-2 text-left border ${
+              isArgentinaUpcoming
+                ? "border-[#74ACDF]/50 bg-gradient-to-r from-[#74ACDF]/15 via-bg-surface to-white/5 hover:border-[#74ACDF]/70"
+                : "border-primary/30 bg-gradient-to-r from-primary/5 via-bg-surface to-primary/5 hover:border-primary/40"
+            }`}
+            style={isArgentinaUpcoming ? { boxShadow: `0 0 24px ${ARGENTINA_COLORS.celeste}30` } : undefined}
           >
-            <CalendarClock size={20} className="text-primary shrink-0" />
+            <CalendarClock size={20} className="shrink-0" style={{ color: isArgentinaUpcoming ? ARGENTINA_COLORS.celeste : undefined }} />
             <div className="flex-1">
-              <div className="font-display text-[10px] font-bold tracking-widest text-primary">
-                PRÓXIMO PARTIDO
+              <div
+                className="font-display text-[10px] font-bold tracking-widest"
+                style={{ color: isArgentinaUpcoming ? ARGENTINA_COLORS.celeste : undefined }}
+              >
+                {isArgentinaUpcoming ? "HOY/PRONTO JUEGA ARGENTINA" : "PRÓXIMO PARTIDO"}
               </div>
               <div className="text-sm font-bold mt-0.5">
                 {nextBigMatch.m.teamA.flag} {nextBigMatch.m.teamA.code} vs {nextBigMatch.m.teamB.code} {nextBigMatch.m.teamB.flag}
               </div>
-              <div className="text-xs text-text-muted mt-0.5">{countdownLabel}</div>
+              <div className={`text-xs mt-0.5 ${isArgentinaUpcoming ? "text-white/80" : "text-text-muted"}`}>
+                {isArgentinaUpcoming ? `${countdownLabel} · cargá tu pronóstico, hermano` : countdownLabel}
+              </div>
             </div>
             <ChevronRight size={14} className="text-text-muted shrink-0" />
           </button>
