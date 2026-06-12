@@ -8,8 +8,8 @@ import { soundsEnabled, setSoundsEnabled } from "@/lib/sound-fx";
 import XPBar from "@/components/XPBar";
 import { useApp } from "@/lib/store";
 import {
-  useUserStats,
   useUserBadges,
+  useDashboard,
   deriveLevel,
 } from "@/lib/hooks";
 import { getReferralContent } from "@/lib/share";
@@ -27,11 +27,33 @@ const fadeUp = {
 
 export default function ProfileScreen() {
   const { dbUser, setActiveTab, setScreen, signOut } = useApp();
-  const { stats } = useUserStats();
-  const { badges: apiBadges, loading: badgesLoading } = useUserBadges();
+  // Stats vienen del dashboard agregado (mismo SWR cache que Home → cero
+  // inconsistencias del tipo 'rank 17 con 0 pts'). Si la cache está fresca,
+  // aparece instant; sino paga 1 roundtrip y se queda warm.
+  const { data: dash, refetch: refetchDash } = useDashboard();
+  const stats = dash?.stats ?? null;
+  const { badges: apiBadges, loading: badgesLoading, refetch: refetchBadges } = useUserBadges();
   const [signingOut, setSigningOut] = useState(false);
   const [sfxOn, setSfxOn] = useState(false);
   useEffect(() => { setSfxOn(soundsEnabled()); }, []);
+
+  // Refresh stats + badges cuando la pestaña vuelve al foreground o al
+  // remount de ProfileScreen (cambio de tab dentro de la app). Cubre el
+  // caso 'venis del Home después de cerrar un partido y querés ver tus
+  // puntos actualizados sin recargar la página entera'.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        void refetchDash?.();
+        void refetchBadges?.();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    // También refetch al mount (en cada vez que volves al tab Profile).
+    void refetchDash?.();
+    void refetchBadges?.();
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [refetchDash, refetchBadges]);
 
   const handleSignOut = async () => {
     if (signingOut) return;
