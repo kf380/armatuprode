@@ -199,6 +199,7 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
           }
         }).catch(() => {});
         void import("@/lib/sound-fx").then((mod) => mod.playWinFanfare()).catch(() => {});
+        void import("@/lib/haptics").then((h) => h.tapCelebrate()).catch(() => {});
         if (isArg && isExact) {
           setArgentinaGoooolFor(m.id);
           setTimeout(() => setArgentinaGoooolFor(null), 2500);
@@ -207,6 +208,27 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
       prevMatchStatusesRef.current[m.id] = m.status;
     }
   }, [apiMatches]);
+
+  // Detectar cambio de score en live matches → disparar sonido GOL automático
+  // (respeta el toggle Sounds OFF/ON del Profile) + vibración celebrate.
+  const prevLiveScoresRef = useRef<Record<string, string>>({});
+  useEffect(() => {
+    let golFired = false;
+    for (const lm of liveMatches) {
+      const key = `${lm.scoreA ?? 0}-${lm.scoreB ?? 0}`;
+      const prev = prevLiveScoresRef.current[lm.id];
+      if (prev !== undefined && prev !== key && !golFired) {
+        // Solo dispara si el score SUBIÓ (cualquiera de los dos lados)
+        const [prevA, prevB] = prev.split("-").map(Number);
+        if ((lm.scoreA ?? 0) > prevA || (lm.scoreB ?? 0) > prevB) {
+          golFired = true;
+          void import("@/lib/sound-fx").then((m) => m.playGolAlert()).catch(() => {});
+          void import("@/lib/haptics").then((h) => h.tapCelebrate()).catch(() => {});
+        }
+      }
+      prevLiveScoresRef.current[lm.id] = key;
+    }
+  }, [liveMatches]);
 
   // Tick every 30s to recompute countdown labels. 30s feels live without
   // re-rendering this big tree every second.

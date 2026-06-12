@@ -104,6 +104,7 @@ export default function MatchesScreen() {
       if (!res.ok) throw new Error("save failed");
       setQuickStatus((s) => ({ ...s, [matchId]: "saved" }));
       void import("@/lib/sound-fx").then((m) => m.playPickConfirm()).catch(() => {});
+      void import("@/lib/haptics").then((h) => h.tapConfirm()).catch(() => {});
       // Fade el "saved" después de 1.6s
       if (quickSavedTimerRef.current[matchId]) clearTimeout(quickSavedTimerRef.current[matchId]);
       quickSavedTimerRef.current[matchId] = setTimeout(() => {
@@ -131,6 +132,8 @@ export default function MatchesScreen() {
     quickTimerRef.current[matchId] = setTimeout(() => {
       submitQuick(matchId, scoreA, scoreB);
     }, 800);
+    // Haptic feedback chico en cada +/- para sentir el click en mobile
+    void import("@/lib/haptics").then((h) => h.tapLight()).catch(() => {});
   };
 
   // Cleanup timers on unmount.
@@ -586,7 +589,15 @@ export default function MatchesScreen() {
                               >
                                 <Minus size={14} />
                               </button>
-                              <span className="font-display text-2xl font-bold text-primary w-7 text-center">{currentA}</span>
+                              <motion.span
+                                key={`A-${match.id}-${currentA}`}
+                                initial={{ scale: 1.25, color: "#10B981" }}
+                                animate={{ scale: 1, color: "currentColor" }}
+                                transition={{ type: "spring", stiffness: 480, damping: 18 }}
+                                className="font-display text-2xl font-bold text-primary w-7 text-center inline-block"
+                              >
+                                {currentA}
+                              </motion.span>
                               <button
                                 onClick={() => handleQuickChange(match.id, Math.min(15, currentA + 1), currentB)}
                                 className="h-8 w-8 rounded-full border border-border-default bg-bg-primary flex items-center justify-center text-text-secondary hover:border-primary/40 active:scale-95"
@@ -622,7 +633,15 @@ export default function MatchesScreen() {
                               >
                                 <Minus size={14} />
                               </button>
-                              <span className="font-display text-2xl font-bold text-primary w-7 text-center">{currentB}</span>
+                              <motion.span
+                                key={`B-${match.id}-${currentB}`}
+                                initial={{ scale: 1.25, color: "#10B981" }}
+                                animate={{ scale: 1, color: "currentColor" }}
+                                transition={{ type: "spring", stiffness: 480, damping: 18 }}
+                                className="font-display text-2xl font-bold text-primary w-7 text-center inline-block"
+                              >
+                                {currentB}
+                              </motion.span>
                               <button
                                 onClick={() => handleQuickChange(match.id, currentA, Math.min(15, currentB + 1))}
                                 className="h-8 w-8 rounded-full border border-border-default bg-bg-primary flex items-center justify-center text-text-secondary hover:border-primary/40 active:scale-95"
