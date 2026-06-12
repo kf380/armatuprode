@@ -549,7 +549,7 @@ export default function MatchesScreen() {
                   </span>
                   {hasPred ? (
                     <span className="flex items-center gap-1 text-[10px] text-primary font-bold">
-                      <Check size={12} /> Predicho
+                      <Check size={12} /> Completado
                     </span>
                   ) : (
                     <span className="flex items-center gap-1 text-[10px] text-accent font-bold">
