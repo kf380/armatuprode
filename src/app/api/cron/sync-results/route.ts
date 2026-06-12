@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { syncFootballData } from "@/lib/sync-football-data";
 import { validateProductionEnv } from "@/lib/env";
+import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
   validateProductionEnv();
@@ -18,6 +19,28 @@ export async function GET(request: NextRequest) {
       { error: "Faltan FOOTBALL_DATA_TOKEN o ADMIN_API_KEY" },
       { status: 500 },
     );
+  }
+
+  // Cheap guard: skip if there's nothing potentially syncable in the window.
+  // Active = LIVE right now, OR kicked off within the last 4h (might be
+  // finishing), OR kicks off within the next 30min (warm-up). When none of
+  // those hold, the call is a no-op and we don't burn football-data quota.
+  const now = new Date();
+  const fourHoursAgo = new Date(now.getTime() - 4 * 60 * 60 * 1000);
+  const in30min = new Date(now.getTime() + 30 * 60 * 1000);
+  const activeCount = await prisma.match.count({
+    where: {
+      OR: [
+        { status: "LIVE" },
+        {
+          status: { in: ["UPCOMING", "LIVE"] },
+          matchDate: { gte: fourHoursAgo, lte: in30min },
+        },
+      ],
+    },
+  });
+  if (activeCount === 0) {
+    return NextResponse.json({ ok: true, skipped: "no_active_matches" });
   }
 
   const baseUrl =
