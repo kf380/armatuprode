@@ -30,42 +30,41 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  // Get all user predictions for active tournament
-  const predictions = await prisma.prediction.findMany({
-    where: { userId: dbUser.id, match: { tournamentId: tournament.id } },
-    include: { match: true },
-    orderBy: { match: { matchDate: "desc" } },
-  });
+  // Single trip to DB: predictions (with match) + global aggregate in parallel.
+  const [predictions, allPoints] = await Promise.all([
+    prisma.prediction.findMany({
+      where: { userId: dbUser.id, match: { tournamentId: tournament.id } },
+      select: {
+        scoreA: true,
+        scoreB: true,
+        points: true,
+        match: { select: { status: true, scoreA: true, scoreB: true } },
+      },
+      orderBy: { match: { matchDate: "desc" } },
+    }),
+    prisma.prediction.groupBy({
+      by: ["userId"],
+      where: { match: { tournamentId: tournament.id } },
+      _sum: { points: true },
+    }),
+  ]);
 
   const totalPredictions = predictions.length;
   const totalPoints = predictions.reduce((sum, p) => sum + p.points, 0);
-  // Count exactos by comparing predicted vs actual scores (works for groups and knockout)
   const exactos = predictions.filter((p) => {
     if (p.match.status !== "FINISHED" || p.match.scoreA == null || p.match.scoreB == null) return false;
     return p.scoreA === p.match.scoreA && p.scoreB === p.match.scoreB;
   }).length;
 
-  // Precision: predictions on finished matches that earned points
   const finishedPredictions = predictions.filter((p) => p.match.status === "FINISHED");
   const correct = finishedPredictions.filter((p) => p.points > 0).length;
   const precision = finishedPredictions.length > 0 ? Math.round((correct / finishedPredictions.length) * 100) : 0;
 
-  // Streak: consecutive correct predictions on finished matches (ordered by date desc)
   let streak = 0;
   for (const p of finishedPredictions) {
-    if (p.points > 0) {
-      streak++;
-    } else {
-      break;
-    }
+    if (p.points > 0) streak++;
+    else break;
   }
-
-  // Global rank: count users with more points
-  const allPoints = await prisma.prediction.groupBy({
-    by: ["userId"],
-    where: { match: { tournamentId: tournament.id } },
-    _sum: { points: true },
-  });
 
   const usersAbove = allPoints.filter((a) => (a._sum.points || 0) > totalPoints).length;
   const globalRank = usersAbove + 1;

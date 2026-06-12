@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from "react";
 interface PoolContribution {
   userId: string;
   name: string;
@@ -87,15 +87,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [selectedTournamentId, setSelectedTournamentId] = useState<string | null>(null);
 
   // Helper: fetch with auth token in header
+  // Cache the access token in a ref so authFetch doesn't pay a getSession()
+  // round-trip per call. Refreshed by onAuthStateChange below.
+  const accessTokenRef = useRef<string | null>(null);
+
   const authFetch = useCallback(async (url: string, options: RequestInit = {}) => {
-    const supabase = getSupabase();
-    const { data: { session } } = await supabase.auth.getSession();
+    let token = accessTokenRef.current;
+    if (!token) {
+      const supabase = getSupabase();
+      const { data: { session } } = await supabase.auth.getSession();
+      token = session?.access_token ?? null;
+      accessTokenRef.current = token;
+    }
     const existingHeaders = (options.headers || {}) as Record<string, string>;
     const headers: Record<string, string> = {
       ...existingHeaders,
     };
-    if (session?.access_token) {
-      headers["Authorization"] = `Bearer ${session.access_token}`;
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
     }
     return fetch(url, { ...options, headers });
   }, []);
@@ -134,6 +143,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Always call getSession() — with @supabase/ssr the token lives in cookies,
     // not localStorage, so we can't shortcut by checking storage.
     supabase.auth.getSession().then(async ({ data: { session } }) => {
+      accessTokenRef.current = session?.access_token ?? null;
       if (session?.user) {
         await resolveSession(session);
       } else {
@@ -149,6 +159,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Listen for auth changes (login, logout, token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
+        // Keep cached access token fresh so authFetch doesn't roundtrip.
+        accessTokenRef.current = session?.access_token ?? null;
         if (session?.user) {
           await resolveSession(session);
         } else {

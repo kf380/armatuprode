@@ -147,11 +147,14 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
       level,
       levelName,
       xpNext,
-      points: stats?.points ?? mockUser.points,
-      globalRank: stats?.globalRank ?? mockUser.globalRank,
-      streak: stats?.streak ?? mockUser.streak,
-      precision: stats?.precision ?? mockUser.precision,
-      exactos: stats?.exactos ?? mockUser.exactos,
+      // Stats: never fall back to mock data for real users. Show 0 / null
+      // and let the UI render skeleton placeholders while loading.
+      points: stats?.points ?? 0,
+      globalRank: stats?.globalRank ?? null,
+      streak: stats?.streak ?? 0,
+      precision: stats?.precision ?? null,
+      exactos: stats?.exactos ?? 0,
+      statsLoaded: !!stats,
     };
   }, [dbUser, stats]);
 
@@ -326,21 +329,21 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
         >
           <TrendingUp size={18} className="mx-auto mb-2 text-secondary" />
           <div className="font-display text-xl font-bold text-secondary">
-            #{user.globalRank.toLocaleString()}
+            {user.globalRank != null ? `#${user.globalRank.toLocaleString()}` : (user.statsLoaded ? "—" : "…")}
           </div>
           <div className="text-[10px] text-text-muted mt-1 font-display tracking-wider">RANKING</div>
         </button>
         <div className="rounded-2xl border border-border-default bg-bg-surface p-4 text-center">
           <Target size={18} className="mx-auto mb-2 text-accent" />
           <div className="font-display text-xl font-bold text-accent">
-            {user.precision}%
+            {user.precision != null ? `${user.precision}%` : (user.statsLoaded ? "—" : "…")}
           </div>
           <div className="text-[10px] text-text-muted mt-1 font-display tracking-wider">PRECISION</div>
         </div>
         <div className="rounded-2xl border border-border-default bg-bg-surface p-4 text-center">
           <div className="text-lg mb-1.5">🎯</div>
           <div className="font-display text-xl font-bold text-text-primary">
-            {user.exactos}
+            {user.statsLoaded ? user.exactos : "…"}
           </div>
           <div className="text-[10px] text-text-muted mt-1 font-display tracking-wider">EXACTOS</div>
         </div>
