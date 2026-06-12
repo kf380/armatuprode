@@ -187,6 +187,11 @@ model Group {
   declaredPoolCurrency  String?    @default("ARS")
   declaredPoolUpdatedAt DateTime?
 
+  // When true (default), members can see each other's predictions before
+  // kickoff. When false, others' predictions stay hidden until the match
+  // starts — adds suspense for "Vs entre amigos" reveal.
+  revealPredictionsBeforeKickoff Boolean @default(true)
+
   tournament      Tournament            @relation(fields: [tournamentId], references: [id])
   organization    Organization?         @relation(fields: [organizationId], references: [id])
   members         GroupMember[]

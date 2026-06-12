@@ -159,6 +159,8 @@ export async function GET(
       declaredPoolEntry: group.declaredPoolEntry,
       declaredPoolCurrency: group.declaredPoolCurrency,
       declaredPoolUpdatedAt: group.declaredPoolUpdatedAt?.toISOString() ?? null,
+      // Privacy setting for "Vs entre amigos"
+      revealPredictionsBeforeKickoff: group.revealPredictionsBeforeKickoff,
     },
     ranking,
     availableDates,
@@ -212,6 +214,7 @@ export async function PATCH(
     rulesDescription,
     publicJoinEnabled,
     brandingConfig,
+    revealPredictionsBeforeKickoff,
     // Phase 2: Manual Pool (gated)
     moneyMode: rawMoneyMode,
     declaredPoolEntry: rawDeclaredPoolEntry,
@@ -221,6 +224,7 @@ export async function PATCH(
     rulesDescription?: string | null;
     publicJoinEnabled?: boolean;
     brandingConfig?: Record<string, unknown> | null;
+    revealPredictionsBeforeKickoff?: boolean;
     moneyMode?: MoneyMode;
     declaredPoolEntry?: number | null;
   };
@@ -259,6 +263,9 @@ export async function PATCH(
   }
   if (typeof publicJoinEnabled === "boolean") {
     data.publicJoinEnabled = publicJoinEnabled;
+  }
+  if (typeof revealPredictionsBeforeKickoff === "boolean") {
+    data.revealPredictionsBeforeKickoff = revealPredictionsBeforeKickoff;
   }
   if (brandingConfig !== undefined) {
     // Only allow plain JSON objects (no functions, no prototype pollution risk).

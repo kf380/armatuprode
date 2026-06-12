@@ -161,10 +161,12 @@ export interface GroupDetail {
     entryFee: number;
     currency: string;
     inviteCode: string;
+    revealPredictionsBeforeKickoff?: boolean;
   };
   ranking: GroupDetailRanking[];
   availableDates: string[];
   selectedDate: string | null;
+  permissions?: { canEdit: boolean; canViewBilling: boolean; canResumePayment: boolean };
 }
 
 export interface RankingEntry {

@@ -42,7 +42,8 @@ export default function GroupsScreen() {
 
   type UpcomingMatchResp = {
     match: { id: string; teamAName: string; teamBName: string; teamAFlag: string; teamBFlag: string; teamACode: string; teamBCode: string; matchDate: string } | null;
-    predictions: { userId: string; name: string; avatar: string; scoreA: number | null; scoreB: number | null; isMe: boolean }[];
+    predictions: { userId: string; name: string; avatar: string; scoreA: number | null; scoreB: number | null; hasPredicted?: boolean; hidden?: boolean; isMe: boolean }[];
+    revealMode?: boolean;
   };
   const [upcomingFriends, setUpcomingFriends] = useState<UpcomingMatchResp | null>(null);
   useEffect(() => {
@@ -495,10 +496,32 @@ export default function GroupsScreen() {
                 })}
               </div>
             )}
-            {upcomingFriends?.match && upcomingFriends.predictions.some((p) => p.scoreA != null) && (
+            {upcomingFriends?.match && (upcomingFriends.predictions.some((p) => p.scoreA != null) || upcomingFriends.predictions.some((p) => p.hidden)) && (
               <div className="rounded-2xl border border-border-default bg-bg-surface/60 p-3 mb-2">
-                <div className="font-display text-[10px] tracking-widest text-text-muted mb-2">
-                  PRÓXIMO · {upcomingFriends.match.teamAFlag} {upcomingFriends.match.teamACode} vs {upcomingFriends.match.teamBCode} {upcomingFriends.match.teamBFlag}
+                <div className="flex items-center justify-between mb-2">
+                  <div className="font-display text-[10px] tracking-widest text-text-muted">
+                    PRÓXIMO · {upcomingFriends.match.teamAFlag} {upcomingFriends.match.teamACode} vs {upcomingFriends.match.teamBCode} {upcomingFriends.match.teamBFlag}
+                  </div>
+                  {detail?.permissions?.canEdit && (
+                    <button
+                      onClick={async () => {
+                        const next = !(detail.group.revealPredictionsBeforeKickoff ?? true);
+                        try {
+                          await authFetch(`/api/groups/${selectedGroup}`, {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ revealPredictionsBeforeKickoff: next }),
+                          });
+                          // Re-fetch detail + upcoming
+                          const res = await authFetch(`/api/groups/${selectedGroup}/upcoming-match`);
+                          if (res.ok) setUpcomingFriends(await res.json());
+                        } catch { /* best-effort */ }
+                      }}
+                      className="text-[10px] text-text-muted hover:text-primary"
+                    >
+                      {detail.group.revealPredictionsBeforeKickoff === false ? "modo suspense ✓" : "modo abierto"}
+                    </button>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {upcomingFriends.predictions
@@ -514,6 +537,16 @@ export default function GroupsScreen() {
                       >
                         <span className="opacity-80">{p.isMe ? "Vos" : p.name.split(" ")[0]}</span>{" "}
                         <span className="font-display">{p.scoreA}-{p.scoreB}</span>
+                      </div>
+                    ))}
+                  {upcomingFriends.predictions
+                    .filter((p) => p.hidden)
+                    .map((p) => (
+                      <div
+                        key={p.userId}
+                        className="rounded-lg px-2.5 py-1 text-xs border border-dashed border-border-default text-text-muted italic"
+                      >
+                        {p.name.split(" ")[0]} · oculto
                       </div>
                     ))}
                 </div>

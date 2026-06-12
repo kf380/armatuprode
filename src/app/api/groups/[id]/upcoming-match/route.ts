@@ -25,6 +25,7 @@ export async function GET(
     where: { id: groupId },
     select: {
       tournamentId: true,
+      revealPredictionsBeforeKickoff: true,
       members: { select: { userId: true, user: { select: { id: true, name: true, avatar: true } } } },
     },
   });
@@ -65,20 +66,28 @@ export async function GET(
   });
 
   const byUserId = new Map(predictions.map((p) => [p.userId, p]));
+  // If the group has privacy ON, hide other members' scores until kickoff.
+  // The user always sees their own.
+  const hideOthers = group.revealPredictionsBeforeKickoff === false;
   const friends = group.members.map((m) => {
     const p = byUserId.get(m.userId);
+    const isMe = m.userId === dbUser.id;
+    const visible = isMe || !hideOthers;
     return {
       userId: m.userId,
       name: m.user?.name ?? "Jugador",
       avatar: m.user?.avatar ?? "👤",
-      scoreA: p?.scoreA ?? null,
-      scoreB: p?.scoreB ?? null,
-      isMe: m.userId === dbUser.id,
+      scoreA: visible ? (p?.scoreA ?? null) : null,
+      scoreB: visible ? (p?.scoreB ?? null) : null,
+      hasPredicted: !!p,
+      hidden: !visible && !!p,
+      isMe,
     };
   });
 
   return NextResponse.json({
     match: nextMatch,
     predictions: friends,
+    revealMode: !hideOthers,
   });
 }
