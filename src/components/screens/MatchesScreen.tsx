@@ -159,11 +159,19 @@ export default function MatchesScreen() {
   ).length;
 
   const openPredict = (matchId: string) => {
-    const existing = predictions[matchId];
     const match = matches.find((m) => m.id === matchId);
-    setTempScoreA(existing?.scoreA ?? match?.userPrediction?.scoreA ?? 0);
-    setTempScoreB(existing?.scoreB ?? match?.userPrediction?.scoreB ?? 0);
-    setTempQualifier(existing?.predictedQualifier ?? match?.userPrediction?.predictedQualifier ?? null);
+    if (!match) return;
+    // Hard gate: same condition as backend (status + matchDate). Prevents the
+    // modal from opening on a match that already kicked off, even if backend
+    // status hasn't been synced yet.
+    const kickedOff = new Date(match.matchDateIso).getTime() <= Date.now();
+    if (kickedOff || match.status !== "upcoming") {
+      return;
+    }
+    const existing = predictions[matchId];
+    setTempScoreA(existing?.scoreA ?? match.userPrediction?.scoreA ?? 0);
+    setTempScoreB(existing?.scoreB ?? match.userPrediction?.scoreB ?? 0);
+    setTempQualifier(existing?.predictedQualifier ?? match.userPrediction?.predictedQualifier ?? null);
     setEditingMatch(matchId);
   };
 

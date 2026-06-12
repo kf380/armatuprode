@@ -152,21 +152,26 @@ export async function POST(
 
     userPointsMap.set(pred.userId, finalPoints);
 
-    // Grant XP for the result (pass breakdown to avoid ambiguous point values)
-    const xpRewards = calculateXpForPrediction(points, match.phase, breakdown.isExact, breakdown.isWinner);
-    for (const reward of xpRewards) {
-      await prisma.xpEvent.create({
-        data: {
-          userId: pred.userId,
-          amount: reward.amount,
-          reason: reward.reason,
-          matchId: id,
-        },
-      });
-      await prisma.user.update({
-        where: { id: pred.userId },
-        data: { xp: { increment: reward.amount } },
-      });
+    // Grant XP for the result (pass breakdown to avoid ambiguous point values).
+    // Best-effort: a DB hiccup here must not abort the whole scoring run.
+    try {
+      const xpRewards = calculateXpForPrediction(points, match.phase, breakdown.isExact, breakdown.isWinner);
+      for (const reward of xpRewards) {
+        await prisma.xpEvent.create({
+          data: {
+            userId: pred.userId,
+            amount: reward.amount,
+            reason: reward.reason,
+            matchId: id,
+          },
+        });
+        await prisma.user.update({
+          where: { id: pred.userId },
+          data: { xp: { increment: reward.amount } },
+        });
+      }
+    } catch (e) {
+      log("warn", "finish_xp_grant_failed", { matchId: id, userId: pred.userId, error: e instanceof Error ? e.message : String(e) });
     }
 
     // Coin rewards based on result
@@ -209,48 +214,53 @@ export async function POST(
       );
     }
 
-    // Check streak (last 5 finished predictions all with points > 0)
-    if (points > 0) {
-      const recentPredictions = await prisma.prediction.findMany({
-        where: {
-          userId: pred.userId,
-          match: { status: "FINISHED" },
-        },
-        orderBy: { match: { matchDate: "desc" } },
-        take: 5,
-      });
-
-      if (recentPredictions.length === 5 && recentPredictions.every((p) => p.points > 0)) {
-        // Check if we already gave streak XP recently (avoid double-granting)
-        const recentStreak = await prisma.xpEvent.findFirst({
+    // Check streak (last 5 finished predictions all with points > 0).
+    // Best-effort: streak failures must not abort scoring.
+    try {
+      if (points > 0) {
+        const recentPredictions = await prisma.prediction.findMany({
           where: {
             userId: pred.userId,
-            reason: "streak_5",
-            createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+            match: { status: "FINISHED" },
           },
+          orderBy: { match: { matchDate: "desc" } },
+          take: 5,
         });
 
-        if (!recentStreak) {
-          await prisma.xpEvent.create({
-            data: { userId: pred.userId, amount: 100, reason: "streak_5", matchId: id },
-          });
-          await prisma.user.update({
-            where: { id: pred.userId },
-            data: { xp: { increment: 100 } },
+        if (recentPredictions.length === 5 && recentPredictions.every((p) => p.points > 0)) {
+          // Check if we already gave streak XP recently (avoid double-granting)
+          const recentStreak = await prisma.xpEvent.findFirst({
+            where: {
+              userId: pred.userId,
+              reason: "streak_5",
+              createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+            },
           });
 
-          // +100 coins for streak
-          coinPromises.push(
-            creditCoins({
-              userId: pred.userId,
-              amount: 100,
-              source: WalletLotSource.STREAK,
-              reason: "streak_5",
-              idempotencyKey: `coin_streak_${id}_${pred.userId}`,
-            }),
-          );
+          if (!recentStreak) {
+            await prisma.xpEvent.create({
+              data: { userId: pred.userId, amount: 100, reason: "streak_5", matchId: id },
+            });
+            await prisma.user.update({
+              where: { id: pred.userId },
+              data: { xp: { increment: 100 } },
+            });
+
+            // +100 coins for streak
+            coinPromises.push(
+              creditCoins({
+                userId: pred.userId,
+                amount: 100,
+                source: WalletLotSource.STREAK,
+                reason: "streak_5",
+                idempotencyKey: `coin_streak_${id}_${pred.userId}`,
+              }),
+            );
+          }
         }
       }
+    } catch (e) {
+      log("warn", "finish_streak_check_failed", { matchId: id, userId: pred.userId, error: e instanceof Error ? e.message : String(e) });
     }
 
     // Await this prediction's coin credits before moving on. Sequential between
@@ -264,64 +274,69 @@ export async function POST(
     }
   }
 
-  // Check matchday complete for each user
-  const matchDate = match.matchDate;
-  const dayStart = new Date(matchDate);
-  dayStart.setHours(0, 0, 0, 0);
-  const dayEnd = new Date(matchDate);
-  dayEnd.setHours(23, 59, 59, 999);
+  // Check matchday complete for each user. Best-effort: failures here must not
+  // block the flip to FINISHED — points are already persisted above.
+  try {
+    const matchDate = match.matchDate;
+    const dayStart = new Date(matchDate);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(matchDate);
+    dayEnd.setHours(23, 59, 59, 999);
 
-  const sameDay = await prisma.match.findMany({
-    where: {
-      tournamentId: match.tournamentId,
-      matchDate: { gte: dayStart, lte: dayEnd },
-    },
-  });
+    const sameDay = await prisma.match.findMany({
+      where: {
+        tournamentId: match.tournamentId,
+        matchDate: { gte: dayStart, lte: dayEnd },
+      },
+    });
 
-  const allFinished = sameDay.every((m) => m.status === "FINISHED" || m.id === id);
+    const allFinished = sameDay.every((m) => m.status === "FINISHED" || m.id === id);
 
-  const matchdayCoinPromises: Promise<unknown>[] = [];
-  if (allFinished && sameDay.length > 1) {
-    for (const [userId] of userPointsMap) {
-      const userDayPredictions = await prisma.prediction.findMany({
-        where: {
-          userId,
-          matchId: { in: sameDay.map((m) => m.id) },
-        },
-      });
-
-      // User predicted all matches of the day and all correct
-      if (
-        userDayPredictions.length === sameDay.length &&
-        userDayPredictions.every((p) => p.points > 0)
-      ) {
-        await prisma.xpEvent.create({
-          data: { userId, amount: 20, reason: "matchday_complete", matchId: id },
-        });
-        await prisma.user.update({
-          where: { id: userId },
-          data: { xp: { increment: 20 } },
-        });
-
-        // +20 coins for matchday complete
-        matchdayCoinPromises.push(
-          creditCoins({
+    const matchdayCoinPromises: Promise<unknown>[] = [];
+    if (allFinished && sameDay.length > 1) {
+      for (const [userId] of userPointsMap) {
+        const userDayPredictions = await prisma.prediction.findMany({
+          where: {
             userId,
-            amount: 20,
-            source: WalletLotSource.MATCHDAY,
-            reason: "matchday_complete",
-            idempotencyKey: `coin_matchday_${id}_${userId}`,
-          }),
-        );
+            matchId: { in: sameDay.map((m) => m.id) },
+          },
+        });
+
+        // User predicted all matches of the day and all correct
+        if (
+          userDayPredictions.length === sameDay.length &&
+          userDayPredictions.every((p) => p.points > 0)
+        ) {
+          await prisma.xpEvent.create({
+            data: { userId, amount: 20, reason: "matchday_complete", matchId: id },
+          });
+          await prisma.user.update({
+            where: { id: userId },
+            data: { xp: { increment: 20 } },
+          });
+
+          // +20 coins for matchday complete
+          matchdayCoinPromises.push(
+            creditCoins({
+              userId,
+              amount: 20,
+              source: WalletLotSource.MATCHDAY,
+              reason: "matchday_complete",
+              idempotencyKey: `coin_matchday_${id}_${userId}`,
+            }),
+          );
+        }
       }
     }
-  }
-  if (matchdayCoinPromises.length > 0) {
-    await logSettled(
-      "finish_matchday_coin_failed",
-      { matchId: id },
-      matchdayCoinPromises,
-    );
+    if (matchdayCoinPromises.length > 0) {
+      await logSettled(
+        "finish_matchday_coin_failed",
+        { matchId: id },
+        matchdayCoinPromises,
+      );
+    }
+  } catch (e) {
+    log("warn", "finish_matchday_check_failed", { matchId: id, error: e instanceof Error ? e.message : String(e) });
   }
 
   // Badges + notifications + chat events: gather and await with structured logs.
