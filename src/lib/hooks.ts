@@ -242,12 +242,29 @@ export function deriveLevel(xp: number): { level: number; levelName: string; xpN
 
 // --- Hooks ---
 
+/**
+ * Lean group shape consumed by HomeScreen. ApiGroup tiene 20+ campos para
+ * GroupsScreen detail; en Home solo necesitamos identificar + contar miembros
+ * + flag de pool. Tipear esto separado baja el response del dashboard ~30%
+ * sin romper el detail.
+ */
+export interface DashboardGroup {
+  id: string;
+  name: string;
+  emoji: string;
+  tournament: string;
+  memberCount: number;
+  hasPool: boolean;
+  currency: string;
+  entryFee: number;
+}
+
 export interface DashboardPayload {
   stats: UserStats;
   tournament: { id: string; name: string; type: string; slug: string } | null;
   matches: ApiMatch[];
   liveMatches: LiveMatch[];
-  groups: ApiGroup[];
+  groups: DashboardGroup[];
   badges: Array<{ id: string; earnedAt: string }>;
 }
 
