@@ -78,10 +78,14 @@ export async function POST(
 
       log("info", "match_gol_push_fanout", { matchId: id, recipients: subscribers.length });
       const { sendPushToUser } = await import("@/lib/push");
+      // tag por match → cada gol reemplaza al anterior en la lock screen
+      // (Live Activity-like). renotify:true para que iOS/Android vibren igual
+      // aunque sea el mismo tag.
+      const tag = `match-${id}`;
       await logSettled(
         "match_gol_push_failed",
         { matchId: id },
-        subscribers.map((u) => sendPushToUser(u.id, title, body)),
+        subscribers.map((u) => sendPushToUser(u.id, title, body, { tag, renotify: true })),
       );
     } catch (e) {
       log("warn", "match_gol_push_dispatch_failed", { matchId: id, error: e instanceof Error ? e.message : String(e) });

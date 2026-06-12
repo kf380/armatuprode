@@ -131,7 +131,8 @@ function AppContent() {
       params.has("join") ||
       params.has("ref") ||
       params.has("payment") ||
-      params.has("login");
+      params.has("login") ||
+      params.has("tab");
     if (!hasIntent) {
       window.location.replace("/landing");
       return;
@@ -143,6 +144,23 @@ function AppContent() {
       window.history.replaceState({}, "", search ? `/?${search}` : "/");
     }
   }, [authLoading, isLoggedIn]);
+
+  // PWA Shortcuts: ?tab=matches / ?tab=groups / ?tab=home apuntan a un tab.
+  // Aplica el tab cuando el user está logueado y limpia el URL.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (authLoading || !isLoggedIn) return;
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get("tab");
+    if (!tab) return;
+    const validTabs = ["home", "matches", "groups", "ranking", "profile"];
+    if (validTabs.includes(tab)) {
+      setActiveTab(tab);
+    }
+    params.delete("tab");
+    const search = params.toString();
+    window.history.replaceState({}, "", search ? `/?${search}` : "/");
+  }, [authLoading, isLoggedIn, setActiveTab]);
 
   const handleNavigate = (tab: string) => {
     setActiveTab(tab);

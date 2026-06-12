@@ -55,7 +55,7 @@ export default function RootLayout({
                 });
                 caches.keys().then(function(names){
                   names.forEach(function(n){
-                    if(n.indexOf('armatuprode-v5')===-1) caches.delete(n);
+                    if(n.indexOf('armatuprode-v6')===-1) caches.delete(n);
                   });
                 });
               }

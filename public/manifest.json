@@ -20,5 +20,28 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
+  ],
+  "shortcuts": [
+    {
+      "name": "Cargar pronóstico",
+      "short_name": "Cargar",
+      "description": "Ir directo a cargar tu pronóstico del próximo partido",
+      "url": "/?tab=matches",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Ranking del grupo",
+      "short_name": "Ranking",
+      "description": "Ver tu posición y la de tus amigos",
+      "url": "/?tab=groups",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Partido en vivo",
+      "short_name": "EN VIVO",
+      "description": "Ver el partido que se está jugando",
+      "url": "/?tab=home",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
   ]
 }

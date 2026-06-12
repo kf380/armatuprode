@@ -1,5 +1,5 @@
 /* eslint-disable no-restricted-globals */
-var CACHE_NAME = "armatuprode-v5";
+var CACHE_NAME = "armatuprode-v6";
 var STATIC_ASSETS = [
   "/icon-192.png",
   "/icon-512.png",
@@ -73,8 +73,12 @@ self.addEventListener("push", function (event) {
       icon: "/icon-192.png",
       badge: "/icon-192.png",
       vibrate: [100, 50, 100],
-      data: { url: "/" },
+      data: { url: data.url || "/" },
     };
+    // tag → reemplaza notificaciones previas con el mismo tag (live-activity style).
+    // renotify → vibra/sonido aunque el tag sea el mismo (lock screen actualizada).
+    if (data.tag) options.tag = data.tag;
+    if (data.renotify) options.renotify = true;
     event.waitUntil(self.registration.showNotification(data.title || "ArmatuProde", options));
   } catch (e) {
     // Invalid JSON
