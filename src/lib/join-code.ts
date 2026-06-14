@@ -1,5 +1,9 @@
 const KEY = "pendingJoinCode";
-const TTL_MS = 60 * 60 * 1000;
+// 7 días. Antes era 1h, lo cual rompía el flow asíncrono: usuarios que
+// abrían el link de invite en WhatsApp pero volvían a la app horas o
+// días después perdían el code en silencio y caían en /main sin grupo.
+// 7d cubre el caso 'mi amiga me pasó el link el lunes y entré el viernes'.
+const TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 type Stored = { code: string; ts: number };
 
