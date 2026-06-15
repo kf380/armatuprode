@@ -257,6 +257,7 @@ export interface DashboardGroup {
   hasPool: boolean;
   currency: string;
   entryFee: number;
+  inviteCode: string;
 }
 
 export interface DashboardPayload {

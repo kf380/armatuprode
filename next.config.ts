@@ -1,5 +1,8 @@
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
+import bundleAnalyzer from "@next/bundle-analyzer";
+
+const withBundleAnalyzer = bundleAnalyzer({ enabled: process.env.ANALYZE === "true" });
 
 const nextConfig: NextConfig = {
   experimental: {
@@ -8,15 +11,15 @@ const nextConfig: NextConfig = {
 };
 
 // Wrap config only when DSN exists so dev without Sentry doesn't pay for it.
-const finalConfig = process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY_DSN
+const configWithSentry = process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY_DSN
   ? withSentryConfig(nextConfig, {
       silent: true,
       org: process.env.SENTRY_ORG,
       project: process.env.SENTRY_PROJECT,
-      // Disables source map upload from local dev; CI/Vercel can opt in.
       sourcemaps: { disable: !process.env.SENTRY_AUTH_TOKEN },
       tunnelRoute: "/monitoring",
     })
   : nextConfig;
 
-export default finalConfig;
+// Bundle analyzer toggle: ANALYZE=true npm run build → abre el reporte HTML.
+export default withBundleAnalyzer(configWithSentry);

@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Share2, Copy, ChevronLeft, MessageCircle, Trophy, BarChart3, CheckCircle2, Circle, DollarSign, Loader2, Send, SmilePlus, X, Trash2, Flag, VolumeX } from "lucide-react";
 import { useApp } from "@/lib/store";
-import { useGroups, useGroupDetail, useGroupActivity, useGroupChat, usePublicConfig } from "@/lib/hooks";
+import { useDashboard, useGroupDetail, useGroupActivity, useGroupChat, usePublicConfig } from "@/lib/hooks";
 import { STICKERS_BY_CATEGORY, type Sticker } from "@/lib/stickers";
 import { getGroupInviteContent, getRankingContent, getRankingDayContent, shareGroupInvite } from "@/lib/share";
 import ShareButton from "@/components/ShareButton";
@@ -33,7 +33,11 @@ function formatChatTime(iso: string): string {
 
 export default function GroupsScreen() {
   const { authFetch, dbUser } = useApp();
-  const { groups: apiGroups, loading: groupsLoading, refetch: refetchGroups } = useGroups();
+  // Lista de grupos del cache compartido (mismo SWR + Redis que Home, Profile,
+  // Matches). El detalle por-grupo (ranking, members, dates) sigue por
+  // useGroupDetail porque NO está en el dashboard.
+  const { data: dashData, loading: groupsLoading, refetch: refetchGroups } = useDashboard();
+  const apiGroups = useMemo(() => dashData?.groups ?? [], [dashData]);
   const { config } = usePublicConfig();
   const realMoneyEnabled = config.flags.enableRealMoneyPools;
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);

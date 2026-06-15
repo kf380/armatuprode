@@ -97,6 +97,7 @@ export async function GET(request: NextRequest) {
             id: true,
             name: true,
             emoji: true,
+            inviteCode: true,
             hasPool: true,
             entryFee: true,
             currency: true,
@@ -210,6 +211,7 @@ export async function GET(request: NextRequest) {
       hasPool: m.group.hasPool,
       currency: m.group.currency,
       entryFee: m.group.entryFee,
+      inviteCode: m.group.inviteCode,
     })),
     badges: badges.map((b) => ({ id: b.badgeId, earnedAt: b.earnedAt.toISOString() })),
   };
