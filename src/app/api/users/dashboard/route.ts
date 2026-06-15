@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/supabase-server";
+import { readDashboardCache, writeDashboardCache } from "@/lib/dashboard-cache";
 
 /**
  * Aggregated dashboard payload. Replaces 5+ parallel hooks on Home with a
@@ -23,6 +24,13 @@ export async function GET(request: NextRequest) {
   const dbUser = await prisma.user.findUnique({ where: { authId: user.id } });
   if (!dbUser) {
     return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
+  }
+
+  // Cache-first: si hay snapshot en Redis (<30s viejo), lo devolvemos. Esto
+  // evita 5 queries Prisma per hit cuando el user navega entre tabs.
+  const cached = await readDashboardCache<unknown>(dbUser.id);
+  if (cached) {
+    return NextResponse.json(cached);
   }
 
   const tournament = await prisma.tournament.findFirst({ where: { active: true } });
@@ -156,7 +164,7 @@ export async function GET(request: NextRequest) {
       };
     });
 
-  return NextResponse.json({
+  const payload = {
     stats: {
       points: totalPoints,
       globalRank,
@@ -204,5 +212,8 @@ export async function GET(request: NextRequest) {
       entryFee: m.group.entryFee,
     })),
     badges: badges.map((b) => ({ id: b.badgeId, earnedAt: b.earnedAt.toISOString() })),
-  });
+  };
+  // Best-effort: cache fire-and-forget. No bloquea la respuesta.
+  void writeDashboardCache(dbUser.id, payload);
+  return NextResponse.json(payload);
 }

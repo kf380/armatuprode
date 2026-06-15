@@ -190,7 +190,7 @@ export interface UserStats {
 
 // --- Helper: transform API match to screen format ---
 
-function apiToScreenMatch(m: ApiMatch): ScreenMatch {
+export function apiToScreenMatch(m: ApiMatch): ScreenMatch {
   const d = new Date(m.matchDate);
   const date = d.toISOString().split("T")[0];
   const time = formatMatchTime(d);

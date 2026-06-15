@@ -7,6 +7,7 @@ import { WalletLotSource } from "@prisma/client";
 import { log, logSettled } from "@/lib/log";
 import { rateLimit } from "@/lib/ratelimit";
 import { trackServer } from "@/lib/analytics-server";
+import { invalidateDashboardCache } from "@/lib/dashboard-cache";
 
 export async function GET(request: NextRequest) {
   const { user } = await getAuthUser(request);
@@ -163,6 +164,10 @@ export async function POST(request: NextRequest) {
       predictedQualifier: match.phase !== "GROUP_STAGE" ? predictedQualifier ?? null : null,
     },
   });
+
+  // Invalidar cache server-side del dashboard para que el próximo GET traiga
+  // la prediction recién guardada (sino el user ve el old payload por 30s).
+  void invalidateDashboardCache(dbUser.id);
 
   if (!existing) {
     log("info", "prediction_created", { userId: dbUser.id, matchId, scoreA, scoreB });

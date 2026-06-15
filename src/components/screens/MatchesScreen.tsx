@@ -4,7 +4,7 @@ import { useMemo, useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, AlertTriangle, Minus, Plus, X, Sparkles, Loader2, CalendarX, Search } from "lucide-react";
 import { useApp } from "@/lib/store";
-import { useMatches, type ScreenMatch } from "@/lib/hooks";
+import { useDashboard, apiToScreenMatch, type ScreenMatch } from "@/lib/hooks";
 import { getPredictionContent, getExactResultContent } from "@/lib/share";
 import ShareButton from "@/components/ShareButton";
 import { calendarDayInTz, classifyMatchDay, formatMatchDayLabel } from "@/lib/format-date";
@@ -73,7 +73,12 @@ interface Prediction {
 
 export default function MatchesScreen() {
   const { authFetch } = useApp();
-  const { matches, tournamentName, loading, error, refetch } = useMatches();
+  // Consumimos el cache compartido del dashboard (mismo que HomeScreen y
+  // ProfileScreen). Si el user navegó por Home antes, esta pantalla aparece
+  // instant sin un nuevo fetch.
+  const { data: dash, loading, error, refetch } = useDashboard();
+  const matches = useMemo(() => (dash?.matches ?? []).map(apiToScreenMatch), [dash]);
+  const tournamentName = dash?.tournament?.name ?? "Mundial 2026";
   const [filter, setFilter] = useState<DateFilter>("today");
   const [phaseFilter, setPhaseFilter] = useState<PhaseFilter>("ALL");
   const [search, setSearch] = useState("");

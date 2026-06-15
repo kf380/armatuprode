@@ -148,6 +148,9 @@ model Prediction {
 
   @@unique([userId, matchId])
   @@index([userId])
+  // Usado por finish/route.ts (scoring loop por cada match terminado) +
+  // por dashboard cuando filtra predicciones de un match en LIVE.
+  @@index([matchId])
 }
 
 model Group {
@@ -310,6 +313,9 @@ model GroupMember {
   group Group @relation(fields: [groupId], references: [id])
 
   @@unique([userId, groupId])
+  // Usado por groups/[id]/route.ts (listar miembros de un grupo) +
+  // dashboard cuando calcula ranking del grupo.
+  @@index([groupId])
 }
 
 enum GroupRole {
