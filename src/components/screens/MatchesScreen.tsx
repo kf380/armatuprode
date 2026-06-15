@@ -561,7 +561,7 @@ export default function MatchesScreen() {
                     </span>
                   ) : (
                     <span className="flex items-center gap-1 text-[10px] text-accent font-bold">
-                      <AlertTriangle size={12} /> Pendiente
+                      <AlertTriangle size={12} /> Sin cargar
                     </span>
                   )}
                 </div>

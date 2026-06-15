@@ -243,7 +243,7 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
     const lastSeen = typeof window !== "undefined" ? parseInt(window.localStorage.getItem(seenKey) || "0", 10) : 0;
     if (lastSeen > 0 && stats.globalRank > lastSeen) {
       const places = stats.globalRank - lastSeen;
-      setOvertakenToast(`🐔 Te pasaron ${places} ${places === 1 ? "lugar" : "lugares"} en el ranking`);
+      setOvertakenToast(`🐔 Bajaste ${places} ${places === 1 ? "puesto" : "puestos"}. Capaz alguien acertó algo bueno`);
       void import("@/lib/haptics").then((h) => h.tapLight()).catch(() => {});
       setTimeout(() => setOvertakenToast(null), 4000);
     }
@@ -604,7 +604,7 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
           </button>
 
           <div className="mt-3 text-center text-xs text-text-muted">
-            {predictedCount}/{totalUpcoming} predicciones completadas
+            Vas {predictedCount} de {totalUpcoming}
           </div>
         </motion.div>
       )}
@@ -656,7 +656,7 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
                       {m.userPrediction.scoreA}–{m.userPrediction.scoreB} ✓
                     </div>
                   ) : (
-                    <div className="mt-1.5 text-[10px] text-accent">Pendiente</div>
+                    <div className="mt-1.5 text-[10px] text-accent">Falta tu pick</div>
                   )}
                 </button>
               );
@@ -671,7 +671,6 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
           onClick={() => onNavigate("ranking")}
           className="relative overflow-hidden rounded-2xl border border-border-default bg-gradient-to-br from-bg-surface to-bg-primary p-4 text-center transition-all hover:border-secondary/30 active:scale-[0.97]"
         >
-          <div className="absolute top-2 right-2 text-[8px] font-display tracking-widest text-text-muted/40">RANK</div>
           <div
             className="font-display font-black leading-none text-secondary"
             style={{ fontSize: "clamp(40px, 11vw, 56px)", letterSpacing: "-0.02em" }}
@@ -745,7 +744,7 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
                 </div>
                 <div className="text-xs text-text-secondary leading-relaxed max-w-xs mx-auto mb-4">
                   Creá tu prode en 30 segundos y pasale el link a tu grupo
-                  de WhatsApp. Con 2 personas ya picás.
+                  de WhatsApp. Con 2 personas ya empiezan.
                 </div>
                 <div className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-bg-primary font-display text-xs font-bold tracking-widest">
                   <Plus size={14} /> CREAR MI PRODE
@@ -795,7 +794,7 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
             </div>
             <div className="text-[11px] text-text-secondary mt-0.5">
               {user.streak >= 5
-                ? "Imparable. Levantala que está caliente."
+                ? "Estás imparable. No la sueltes."
                 : user.streak >= 3
                 ? "No la cortes. El próximo partido te espera."
                 : "Vas con manija. Mantenela con la próxima."}
@@ -830,7 +829,7 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
               </div>
               <div className={`text-xs mt-0.5 ${isArgentinaUpcoming ? "text-white/80" : "text-text-muted"}`}>
                 <CountdownLabel kickoff={nextBigMatch.kickoff} />
-                {isArgentinaUpcoming && " · cargá tu pronóstico"}
+                {isArgentinaUpcoming && " · ponele el resultado"}
               </div>
             </div>
             <ChevronRight size={14} className="text-text-muted shrink-0" />

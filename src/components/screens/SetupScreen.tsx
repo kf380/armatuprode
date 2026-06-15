@@ -139,7 +139,7 @@ export default function SetupScreen() {
             <span>{switching ? "Cerrando…" : "Cuenta equivocada"}</span>
           </button>
         </div>
-        <p className="text-sm text-text-secondary mb-8">Elegí cómo te van a ver tus amigos en el prode.</p>
+        <p className="text-sm text-text-secondary mb-8">Elegí cómo te van a ver en el grupo.</p>
 
         {error && (
           <div className="mb-6 rounded-xl bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-400">

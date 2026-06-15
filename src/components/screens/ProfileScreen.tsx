@@ -247,7 +247,7 @@ export default function ProfileScreen() {
           <div className="flex items-start gap-3 mb-3">
             <div className="text-2xl">🎁</div>
             <div className="flex-1">
-              <h3 className="font-display text-xs font-bold tracking-wider mb-1">INVITÁ AMIGOS, GANAN AMBOS</h3>
+              <h3 className="font-display text-xs font-bold tracking-wider mb-1">⚽ TRAÉ A LA HINCHADA · 100 COINS PARA AMBOS</h3>
               <p className="text-xs text-text-secondary leading-relaxed">
                 Pasale tu link a un amigo. Cuando se sume, <strong className="text-primary">vos +100 coins</strong> y <strong className="text-primary">él +100 coins</strong>. Sin tope.
               </p>
