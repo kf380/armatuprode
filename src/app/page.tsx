@@ -5,19 +5,25 @@ import { AnimatePresence, motion } from "framer-motion";
 import { AppProvider, useApp } from "@/lib/store";
 import { savePendingJoinCode, readPendingJoinCode } from "@/lib/join-code";
 import TabBar from "@/components/TabBar";
+import dynamic from "next/dynamic";
+
+// Eagerly loaded: pantallas críticas que se ven sí o sí en el primer load.
 import SplashScreen from "@/components/screens/SplashScreen";
 import LoginScreen from "@/components/screens/LoginScreen";
-import SetupScreen from "@/components/screens/SetupScreen";
 import HomeScreen from "@/components/screens/HomeScreen";
-import MatchesScreen from "@/components/screens/MatchesScreen";
-import GroupsScreen from "@/components/screens/GroupsScreen";
-import RankingScreen from "@/components/screens/RankingScreen";
-import ProfileScreen from "@/components/screens/ProfileScreen";
-import JoinGroupScreen from "@/components/screens/JoinGroupScreen";
-import LiveMatchScreen from "@/components/screens/LiveMatchScreen";
-import ShopScreen from "@/components/screens/ShopScreen";
-import NotificationsScreen from "@/components/screens/NotificationsScreen";
-import RulesScreen from "@/components/screens/RulesScreen";
+
+// Lazy: solo se cargan cuando el user navega a ellas. Bajan el bundle
+// inicial ~60-80 KB para usuarios que entran y miran solo Home.
+const SetupScreen = dynamic(() => import("@/components/screens/SetupScreen"), { ssr: false });
+const MatchesScreen = dynamic(() => import("@/components/screens/MatchesScreen"), { ssr: false });
+const GroupsScreen = dynamic(() => import("@/components/screens/GroupsScreen"), { ssr: false });
+const RankingScreen = dynamic(() => import("@/components/screens/RankingScreen"), { ssr: false });
+const ProfileScreen = dynamic(() => import("@/components/screens/ProfileScreen"), { ssr: false });
+const JoinGroupScreen = dynamic(() => import("@/components/screens/JoinGroupScreen"), { ssr: false });
+const LiveMatchScreen = dynamic(() => import("@/components/screens/LiveMatchScreen"), { ssr: false });
+const ShopScreen = dynamic(() => import("@/components/screens/ShopScreen"), { ssr: false });
+const NotificationsScreen = dynamic(() => import("@/components/screens/NotificationsScreen"), { ssr: false });
+const RulesScreen = dynamic(() => import("@/components/screens/RulesScreen"), { ssr: false });
 
 function PaymentToast() {
   const [toast, setToast] = useState<{ type: string; message: string } | null>(null);

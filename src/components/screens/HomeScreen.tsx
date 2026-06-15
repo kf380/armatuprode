@@ -10,6 +10,7 @@ import type { ScreenMatch } from "@/lib/hooks";
 import { isArgentinaMatch, findNextArgentina, ARGENTINA_COLORS } from "@/lib/argentina-mode";
 import PullToRefresh from "@/components/PullToRefresh";
 import AnimatedNumber from "@/components/AnimatedNumber";
+import { CountdownLabel } from "@/components/CountdownLabel";
 import { calculatePoints } from "@/lib/scoring";
 // Mock fallbacks removed: only `currentUser` is kept as a default-shape source while the
 // real user is loading. Matches/groups must come from the API — never show fakes in prod.
@@ -272,13 +273,9 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
     }
   }, [liveMatches]);
 
-  // Tick every 30s to recompute countdown labels. 30s feels live without
-  // re-rendering this big tree every second.
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setTick((n) => n + 1), 30_000);
-    return () => clearInterval(id);
-  }, []);
+  // Nota: el tick del countdown ahora vive dentro de <CountdownLabel/>.
+  // Antes este componente entero re-renderaba cada 30s solo para actualizar
+  // un string, lo cual hacía re-flow de 1000+ líneas de árbol React.
 
   // Pick the "next big match" for the countdown banner:
   //   1. Argentina's next upcoming match (if any in next 7 days)
@@ -313,18 +310,10 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
     return hoursAway <= 48 && hoursAway > 0;
   }, [nextBigMatch]);
 
-  const countdownLabel = useMemo(() => {
-    if (!nextBigMatch) return null;
-    const diff = nextBigMatch.kickoff - Date.now();
-    if (diff <= 0) return null;
-    const totalMin = Math.floor(diff / 60_000);
-    const d = Math.floor(totalMin / (60 * 24));
-    const h = Math.floor((totalMin % (60 * 24)) / 60);
-    const m = totalMin % 60;
-    if (d > 0) return `en ${d}d ${h}h`;
-    if (h > 0) return `en ${h}h ${m}m`;
-    return `en ${m}m`;
-  }, [nextBigMatch]);
+  // El label visual lo arma <CountdownLabel kickoff={...}/> con su propio
+  // tick. Acá solo necesitamos saber si HAY label (para no mostrar el bloque
+  // si el partido ya empezó). Recalculamos solo cuando cambia nextBigMatch.
+  const hasCountdown = !!nextBigMatch && nextBigMatch.kickoff > Date.now();
 
   // User data from dbUser or fallback to mock (only during initial auth load).
   const user = useMemo(() => {
@@ -817,7 +806,7 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
 
       {/* Countdown banner — only shown when no live match is taking the slot.
           When Argentina is the next match, palette switches to celeste/blanco. */}
-      {nextBigMatch && countdownLabel && (
+      {nextBigMatch && hasCountdown && (
         <motion.div variants={fadeUp}>
           <button
             onClick={() => setActiveTab("matches")}
@@ -840,7 +829,8 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
                 {nextBigMatch.m.teamA.flag} {nextBigMatch.m.teamA.code} vs {nextBigMatch.m.teamB.code} {nextBigMatch.m.teamB.flag}
               </div>
               <div className={`text-xs mt-0.5 ${isArgentinaUpcoming ? "text-white/80" : "text-text-muted"}`}>
-                {isArgentinaUpcoming ? `${countdownLabel} · cargá tu pronóstico` : countdownLabel}
+                <CountdownLabel kickoff={nextBigMatch.kickoff} />
+                {isArgentinaUpcoming && " · cargá tu pronóstico"}
               </div>
             </div>
             <ChevronRight size={14} className="text-text-muted shrink-0" />
