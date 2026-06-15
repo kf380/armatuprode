@@ -83,7 +83,7 @@ export default function PwaInstallPrompt() {
         >
           <Download size={20} className="text-primary shrink-0" />
           <div className="flex-1 min-w-0">
-            <div className="font-display text-xs font-bold tracking-wider">INSTALÁ ARMATUPRODE</div>
+            <div className="font-display text-xs font-bold tracking-wider">Instalá la app</div>
             <div className="text-[11px] text-text-muted leading-snug mt-0.5">
               Push de goles, abre más rápido y queda en tu pantalla.
             </div>

@@ -10,16 +10,16 @@ const nextConfig: NextConfig = {
   },
 };
 
-// Wrap config only when DSN exists so dev without Sentry doesn't pay for it.
-const configWithSentry = process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY_DSN
-  ? withSentryConfig(nextConfig, {
+// Bundle analyzer ENVUELVE PRIMERO el nextConfig base (sin Sentry) porque
+// con Sentry envuelto adentro, los reportes HTML no se generan en .next/analyze.
+const baseWithAnalyzer = withBundleAnalyzer(nextConfig);
+
+export default process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY_DSN
+  ? withSentryConfig(baseWithAnalyzer, {
       silent: true,
       org: process.env.SENTRY_ORG,
       project: process.env.SENTRY_PROJECT,
       sourcemaps: { disable: !process.env.SENTRY_AUTH_TOKEN },
       tunnelRoute: "/monitoring",
     })
-  : nextConfig;
-
-// Bundle analyzer toggle: ANALYZE=true npm run build → abre el reporte HTML.
-export default withBundleAnalyzer(configWithSentry);
+  : baseWithAnalyzer;

@@ -499,11 +499,11 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
             {user.avatar}
           </div>
           <div className="min-w-0">
-            <h1 className="font-display text-sm font-bold tracking-wider text-primary truncate">
-              ARMATUPRODE
-            </h1>
-            <p className="text-xs text-text-secondary truncate">
+            <h1 className="text-base font-bold truncate">
               Hola, {user.name}
+            </h1>
+            <p className="text-[10px] text-text-muted tracking-wider truncate">
+              armatuprode
             </p>
           </div>
         </div>
