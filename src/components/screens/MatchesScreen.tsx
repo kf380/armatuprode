@@ -160,10 +160,10 @@ export default function MatchesScreen() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const allUpcoming = useMemo(
-    () => matches.filter((m) => m.status === "upcoming"),
-    [matches],
-  );
+  const allUpcoming = useMemo(() => {
+    const now = Date.now();
+    return matches.filter((m) => m.status === "upcoming" && new Date(m.matchDateIso).getTime() > now);
+  }, [matches]);
   const finishedMatches = matches.filter((m) => m.status === "finished");
 
   // Bucket counts (for showing how many in each tab + auto-pick fallback).
@@ -296,9 +296,7 @@ export default function MatchesScreen() {
     // Show share prompt after save
     if (match) {
       setSharePrompt(editingMatch);
-      setTimeout(() => {
-        if (sharePrompt === editingMatch) setSharePrompt(null);
-      }, 5000);
+      setTimeout(() => setSharePrompt(null), 5000);
     }
 
     setTimeout(() => setSavedAnimation(null), 1500);

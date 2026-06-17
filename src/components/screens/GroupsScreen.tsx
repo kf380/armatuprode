@@ -277,7 +277,7 @@ export default function GroupsScreen() {
 
   // Group detail view
   if (selectedGroup) {
-    if (detailLoading) {
+    if (detailLoading || !detail) {
       return (
         <div className="flex items-center justify-center py-20">
           <Loader2 className="animate-spin text-primary" size={32} />

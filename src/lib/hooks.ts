@@ -452,6 +452,7 @@ export function useGroupDetail(id: string | null, date?: string | null) {
 
   useEffect(() => {
     if (id) {
+      setDetail(null); // clear stale data before fetching new group to avoid flash
       fetchDetail(id, date ?? null);
     } else {
       setDetail(null);

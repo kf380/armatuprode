@@ -30,6 +30,13 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
   const { config } = usePublicConfig();
   const pushPromptedRef = useRef(false);
 
+  // Ticker to keep `now` fresh so matches fall out of "Y DESPUÉS" within 60s of kickoff
+  const [, setMinuteTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setMinuteTick((t) => t + 1), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
   // Prompt for push notifications on first load
   useEffect(() => {
     if (pushPromptedRef.current) return;
