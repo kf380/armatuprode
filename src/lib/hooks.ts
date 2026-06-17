@@ -316,8 +316,9 @@ export function useDashboard() {
   const { authFetch, dbUser } = useApp();
   const userId = dbUser?.id ?? null;
   // Initial state seeded from localStorage so first paint shows real data.
+  // loading starts false when cache exists — no spinner on warm sessions.
   const [data, setData] = useState<DashboardPayload | null>(() => readDashboardCache(userId));
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => readDashboardCache(userId) === null);
   const [error, setError] = useState<string | null>(null);
   const fetchedRef = useRef(false);
 

@@ -97,6 +97,9 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
   // useLiveMatches no termina su primer fetch.
   const serverLive = livePolled.length > 0 ? livePolled : (dash?.liveMatches ?? []);
 
+  // Computed once per render; updated by the 60s ticker via setMinuteTick.
+  const now = Date.now();
+
   // "Effectively LIVE" = matches con kickoff pasado y NO FINISHED, aunque el
   // server todavía no los haya marcado como LIVE (cuando el sync se atrasa).
   // Evita que aparezcan como "próximo partido" siendo ya jugados.
@@ -386,7 +389,6 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
   // pronóstico, el bloque muestra el score con CTA 'Editar' en vez de
   // 'Predecir ahora'. Antes saltaba al siguiente sin predecir y dejaba al
   // usuario sin saber "lo que viene" si ya había cargado todo el día.
-  const now = Date.now();
   const nextMatch = matches.find(
     (m) => m.status === "upcoming" && new Date(m.matchDateIso).getTime() > now,
   );

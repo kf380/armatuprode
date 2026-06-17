@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { useEffect, useRef, useState } from "react";
 import { AppProvider, useApp } from "@/lib/store";
 import { savePendingJoinCode, readPendingJoinCode } from "@/lib/join-code";
 import TabBar from "@/components/TabBar";
@@ -172,6 +171,13 @@ function AppContent() {
     setActiveTab(tab);
   };
 
+  // Keep-alive: mount each tab once on first visit, keep in DOM with CSS hidden.
+  // Prevents hook re-runs and refetches on every tab switch.
+  const mountedTabsRef = useRef<Set<string>>(new Set([activeTab]));
+  useEffect(() => {
+    mountedTabsRef.current.add(activeTab);
+  }, [activeTab]);
+
   // Full-screen screens (no tab bar)
   if (screen === "splash") return <><PaymentToast /><DeepLinkHandler /><SplashScreen /></>;
   if (screen === "login") return <><PaymentToast /><DeepLinkHandler /><LoginScreen /></>;
@@ -201,21 +207,17 @@ function AppContent() {
         </main>
       ) : (
         <main className="mx-auto max-w-lg md:max-w-2xl lg:max-w-4xl px-5 md:px-8 lg:px-12 pt-[calc(1.5rem+env(safe-area-inset-top))] pb-[calc(7rem+env(safe-area-inset-bottom))] md:pb-6 md:pt-20">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={activeTab}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.25 }}
-            >
-              {activeTab === "home" && <HomeScreen onNavigate={handleNavigate} />}
-              {activeTab === "matches" && <MatchesScreen />}
-              {activeTab === "groups" && <GroupsScreen />}
-              {activeTab === "ranking" && <RankingScreen />}
-              {activeTab === "profile" && <ProfileScreen />}
-            </motion.div>
-          </AnimatePresence>
+          {(["home", "matches", "groups", "ranking", "profile"] as const).map((tab) => (
+            <div key={tab} className={tab === activeTab ? "" : "hidden"}>
+              {mountedTabsRef.current.has(tab) && (
+                tab === "home" ? <HomeScreen onNavigate={handleNavigate} /> :
+                tab === "matches" ? <MatchesScreen /> :
+                tab === "groups" ? <GroupsScreen /> :
+                tab === "ranking" ? <RankingScreen /> :
+                <ProfileScreen />
+              )}
+            </div>
+          ))}
         </main>
       )}
       <TabBar active={activeTab} onChange={setActiveTab} />
