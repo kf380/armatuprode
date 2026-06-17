@@ -112,7 +112,18 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
   }, [apiMatches, serverLive]);
 
   const liveMatches = useMemo(() => {
-    // Merge: server-confirmed live first, then presumed-live (without score data).
+    const MAX_MATCH_DURATION = 3 * 60 * 60 * 1000; // 3h — covers 90' + ET + penalties
+    // Drop server-live matches that the dashboard already marks finished, or whose
+    // kickoff was > 3h ago (server sync delayed, match almost certainly over).
+    const filteredServerLive = serverLive.filter((lm) => {
+      const apiMatch = apiMatches.find((m) => m.id === lm.id);
+      if (apiMatch?.status === "finished") return false;
+      if (apiMatch) {
+        const kickoff = new Date(apiMatch.matchDateIso).getTime();
+        if (now - kickoff > MAX_MATCH_DURATION) return false;
+      }
+      return true;
+    });
     const extras = presumedLive.map((m) => ({
       id: m.id,
       teamACode: m.teamA.code,
@@ -131,8 +142,8 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
         ? { scoreA: m.userPrediction.scoreA, scoreB: m.userPrediction.scoreB }
         : null,
     }));
-    return [...serverLive, ...extras];
-  }, [serverLive, presumedLive]);
+    return [...filteredServerLive, ...extras];
+  }, [serverLive, presumedLive, apiMatches, now]);
   // Mini-catálogo cliente para resolver icon + name de cada badge sin pegar al
   // server. Si en el futuro agregamos badges nuevos, sumar la entry acá.
   const BADGE_CATALOG: Record<string, { icon: string; name: string; description: string }> = {
