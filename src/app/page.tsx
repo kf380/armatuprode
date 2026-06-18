@@ -6,18 +6,17 @@ import { savePendingJoinCode, readPendingJoinCode } from "@/lib/join-code";
 import TabBar from "@/components/TabBar";
 import dynamic from "next/dynamic";
 
-// Eagerly loaded: pantallas críticas que se ven sí o sí en el primer load.
+// Tab screens: eager so switching is always instant.
 import SplashScreen from "@/components/screens/SplashScreen";
 import LoginScreen from "@/components/screens/LoginScreen";
 import HomeScreen from "@/components/screens/HomeScreen";
+import MatchesScreen from "@/components/screens/MatchesScreen";
+import GroupsScreen from "@/components/screens/GroupsScreen";
+import RankingScreen from "@/components/screens/RankingScreen";
+import ProfileScreen from "@/components/screens/ProfileScreen";
 
-// Lazy: solo se cargan cuando el user navega a ellas. Bajan el bundle
-// inicial ~60-80 KB para usuarios que entran y miran solo Home.
+// Lazy: screens rarely visited — keep them out of the main bundle.
 const SetupScreen = dynamic(() => import("@/components/screens/SetupScreen"), { ssr: false });
-const MatchesScreen = dynamic(() => import("@/components/screens/MatchesScreen"), { ssr: false });
-const GroupsScreen = dynamic(() => import("@/components/screens/GroupsScreen"), { ssr: false });
-const RankingScreen = dynamic(() => import("@/components/screens/RankingScreen"), { ssr: false });
-const ProfileScreen = dynamic(() => import("@/components/screens/ProfileScreen"), { ssr: false });
 const JoinGroupScreen = dynamic(() => import("@/components/screens/JoinGroupScreen"), { ssr: false });
 const LiveMatchScreen = dynamic(() => import("@/components/screens/LiveMatchScreen"), { ssr: false });
 const ShopScreen = dynamic(() => import("@/components/screens/ShopScreen"), { ssr: false });
@@ -143,15 +142,6 @@ function AppContent() {
   const handleNavigate = (tab: string) => {
     setActiveTab(tab);
   };
-
-  // Prefetch all tab chunks right after first render so the first tap on any
-  // tab doesn't stall waiting for the JS download.
-  useEffect(() => {
-    import("@/components/screens/MatchesScreen");
-    import("@/components/screens/GroupsScreen");
-    import("@/components/screens/RankingScreen");
-    import("@/components/screens/ProfileScreen");
-  }, []);
 
   // Keep-alive: track visited tabs in a ref so the update is synchronous during
   // render (no extra paint cycle like useState+useEffect would cause).
