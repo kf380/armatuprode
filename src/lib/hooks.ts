@@ -536,6 +536,7 @@ export function useNotifications() {
   const [notifications, setNotifications] = useState<ApiNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const fetchedRef = useRef(false);
 
   const fetchNotifications = useCallback(async () => {
@@ -546,8 +547,9 @@ export function useNotifications() {
       const data = await res.json();
       setNotifications(data.notifications || []);
       setUnreadCount(data.unreadCount || 0);
-    } catch {
-      // Fallback: keep current state
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error");
     } finally {
       setLoading(false);
     }
@@ -581,7 +583,7 @@ export function useNotifications() {
     }
   }, [authFetch]);
 
-  return { notifications, unreadCount, loading, refetch: fetchNotifications, markAsRead };
+  return { notifications, unreadCount, loading, error, refetch: fetchNotifications, markAsRead };
 }
 
 // --- Tournament types ---

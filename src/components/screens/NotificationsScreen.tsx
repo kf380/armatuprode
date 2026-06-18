@@ -27,7 +27,7 @@ function timeAgo(dateStr: string): string {
 
 export default function NotificationsScreen() {
   const { setScreen, setUnreadCount } = useApp();
-  const { notifications, unreadCount, loading, markAsRead } = useNotifications();
+  const { notifications, unreadCount, loading, error, refetch, markAsRead } = useNotifications();
 
   const markAllRead = async () => {
     await markAsRead();
@@ -44,6 +44,27 @@ export default function NotificationsScreen() {
     return (
       <div className="min-h-screen bg-bg-primary flex items-center justify-center">
         <Loader2 className="animate-spin text-primary" size={32} />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-bg-primary px-5 md:px-8 pt-[calc(1.5rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))] mx-auto max-w-lg md:max-w-xl">
+        <div className="flex items-center justify-between mb-6">
+          <button
+            onClick={() => setScreen("main")}
+            className="h-9 w-9 rounded-full border border-border-default flex items-center justify-center text-text-secondary hover:text-text-primary"
+          >
+            <ChevronLeft size={18} />
+          </button>
+          <h1 className="font-display text-lg font-bold tracking-widest">NOTIFICACIONES</h1>
+          <div className="w-9" />
+        </div>
+        <div className="text-center py-20">
+          <p className="text-text-secondary mb-4">No se pudieron cargar las notificaciones</p>
+          <button onClick={refetch} className="text-primary text-sm font-semibold font-display tracking-wider">REINTENTAR</button>
+        </div>
       </div>
     );
   }

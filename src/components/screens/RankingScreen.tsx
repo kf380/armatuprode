@@ -21,7 +21,7 @@ type RankFilter = "global" | "country" | "weekly";
 
 export default function RankingScreen() {
   const { dbUser } = useApp();
-  const { ranking: apiRanking, userPosition, totalPlayers, loading, error } = useRanking();
+  const { ranking: apiRanking, userPosition, totalPlayers, loading, error, refetch } = useRanking();
   const [filter, setFilter] = useState<RankFilter>("global");
 
   const ranking = apiRanking;
@@ -50,7 +50,21 @@ export default function RankingScreen() {
     );
   }
 
-  if (error || ranking.length === 0) {
+  if (error) {
+    return (
+      <motion.div className="space-y-5 pb-6" variants={stagger} initial="hidden" animate="show">
+        <motion.div variants={fadeUp} className="pt-2">
+          <h1 className="font-display text-xl font-bold tracking-widest">RANKING</h1>
+        </motion.div>
+        <div className="text-center py-20">
+          <p className="text-text-secondary mb-4">No se pudo cargar el ranking</p>
+          <button onClick={refetch} className="text-primary text-sm font-semibold font-display tracking-wider">REINTENTAR</button>
+        </div>
+      </motion.div>
+    );
+  }
+
+  if (ranking.length === 0) {
     return (
       <motion.div className="space-y-5 pb-6" variants={stagger} initial="hidden" animate="show">
         <motion.div variants={fadeUp} className="pt-2">
@@ -76,19 +90,26 @@ export default function RankingScreen() {
 
       {/* Filters */}
       <motion.div variants={fadeUp} className="flex gap-2">
-        {(["global", "country", "weekly"] as const).map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`rounded-full px-4 py-1.5 font-display text-xs font-bold tracking-wider transition-all ${
-              filter === f
-                ? "bg-primary text-bg-primary shadow-[0_0_12px_rgba(16,185,129,0.3)]"
-                : "border border-border-default text-text-muted hover:text-text-secondary"
-            }`}
-          >
-            {f === "global" ? "🌍 GLOBAL" : f === "country" ? "🇦🇷 PAIS" : "📅 SEMANAL"}
-          </button>
-        ))}
+        <button
+          onClick={() => setFilter("global")}
+          className="rounded-full px-4 py-1.5 font-display text-xs font-bold tracking-wider transition-all bg-primary text-bg-primary shadow-[0_0_12px_rgba(16,185,129,0.3)]"
+        >
+          🌍 GLOBAL
+        </button>
+        <button
+          title="Próximamente"
+          disabled
+          className="rounded-full px-4 py-1.5 font-display text-xs font-bold tracking-wider border border-border-default text-text-muted opacity-40 cursor-not-allowed pointer-events-none"
+        >
+          🇦🇷 PAIS
+        </button>
+        <button
+          title="Próximamente"
+          disabled
+          className="rounded-full px-4 py-1.5 font-display text-xs font-bold tracking-wider border border-border-default text-text-muted opacity-40 cursor-not-allowed pointer-events-none"
+        >
+          📅 SEMANAL
+        </button>
       </motion.div>
 
       {/* Top 3 podium */}

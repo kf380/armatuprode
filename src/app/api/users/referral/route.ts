@@ -4,6 +4,7 @@ import { getAuthUser } from "@/lib/supabase-server";
 import { creditCoins } from "@/lib/wallet";
 import { WalletLotSource } from "@prisma/client";
 import { logSettled } from "@/lib/log";
+import { rateLimit } from "@/lib/ratelimit";
 
 export async function GET(request: NextRequest) {
   const { user } = await getAuthUser(request);
@@ -36,6 +37,9 @@ export async function POST(request: NextRequest) {
   if (!dbUser) {
     return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
   }
+
+  const rl = await rateLimit("usersWrite", dbUser.id);
+  if (!rl.ok) return NextResponse.json({ error: "Demasiadas solicitudes" }, { status: 429 });
 
   if (dbUser.referredById) {
     return NextResponse.json({ error: "Ya usaste un codigo de referido" }, { status: 409 });

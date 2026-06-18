@@ -134,7 +134,7 @@ export default function ProfileScreen() {
           <div className="text-[10px] font-display tracking-widest text-text-muted">PUNTOS</div>
         </div>
         <div className="rounded-xl border border-border-default bg-bg-surface p-3.5 text-center">
-          <div className="font-display text-2xl font-bold text-secondary">#{user.globalRank.toLocaleString()}</div>
+          <div className="font-display text-2xl font-bold text-secondary">{user.globalRank != null ? `#${user.globalRank.toLocaleString()}` : "—"}</div>
           <div className="text-[10px] font-display tracking-widest text-text-muted">RANKING</div>
         </div>
         <div className="rounded-xl border border-border-default bg-bg-surface p-3.5 text-center">

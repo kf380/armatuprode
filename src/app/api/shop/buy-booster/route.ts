@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/supabase-server";
 import { debitCoins } from "@/lib/wallet";
+import { rateLimit } from "@/lib/ratelimit";
 
 const BOOSTER_PRICES: Record<string, number> = {
   x2: 100,
@@ -14,6 +15,9 @@ export async function POST(request: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+
+  const rl = await rateLimit("predictions", user.id);
+  if (!rl.ok) return NextResponse.json({ error: "Demasiadas solicitudes" }, { status: 429 });
 
   const dbUser = await prisma.user.findUnique({ where: { authId: user.id } });
   if (!dbUser) {

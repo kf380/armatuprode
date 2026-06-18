@@ -13,6 +13,18 @@ export async function GET(
 
   const { id } = await params;
 
+  const dbUser = await prisma.user.findUnique({ where: { authId: user.id } });
+  if (!dbUser) {
+    return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
+  }
+
+  const membership = await prisma.groupMember.findUnique({
+    where: { userId_groupId: { userId: dbUser.id, groupId: id } },
+  });
+  if (!membership) {
+    return NextResponse.json({ error: "No sos miembro de este grupo" }, { status: 403 });
+  }
+
   const { searchParams } = new URL(request.url);
   const cursor = searchParams.get("cursor");
   const limit = Math.min(parseInt(searchParams.get("limit") || "20"), 50);

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { createNotification } from "@/lib/notifications";
 import { log, logSettled } from "@/lib/log";
@@ -12,7 +13,12 @@ export async function GET(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
   const cronSecret = process.env.CRON_SECRET;
   const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  if (!cronSecret || !token || token !== cronSecret) {
+  if (
+    !cronSecret ||
+    !token ||
+    token.length !== cronSecret.length ||
+    !crypto.timingSafeEqual(Buffer.from(token), Buffer.from(cronSecret))
+  ) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 

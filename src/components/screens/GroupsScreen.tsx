@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Share2, Copy, ChevronLeft, MessageCircle, Trophy, BarChart3, CheckCircle2, Circle, DollarSign, Loader2, Send, SmilePlus, X, Trash2, Flag, VolumeX } from "lucide-react";
 import { useApp } from "@/lib/store";
@@ -32,6 +33,7 @@ function formatChatTime(iso: string): string {
 }
 
 export default function GroupsScreen() {
+  const router = useRouter();
   const { authFetch, dbUser } = useApp();
   // Lista de grupos del cache compartido (mismo SWR + Redis que Home, Profile,
   // Matches). El detalle por-grupo (ranking, members, dates) sigue por
@@ -279,8 +281,16 @@ export default function GroupsScreen() {
   if (selectedGroup) {
     if (detailLoading || !detail) {
       return (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="animate-spin text-primary" size={32} />
+        <div>
+          <button
+            onClick={() => setSelectedGroup(null)}
+            className="flex items-center gap-1 text-sm text-text-secondary mb-4 pt-2"
+          >
+            <ChevronLeft size={16} /> Grupos
+          </button>
+          <div className="flex justify-center py-20">
+            <Loader2 className="animate-spin text-primary" size={28} />
+          </div>
         </div>
       );
     }
@@ -1066,7 +1076,7 @@ export default function GroupsScreen() {
           <p className="mt-0.5 text-base text-text-secondary">{displayGroups.length} grupos activos</p>
         </div>
         <button
-          onClick={() => { window.location.href = "/organizer/create"; }}
+          onClick={() => { router.push("/organizer/create"); }}
           className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 font-display text-xs font-bold tracking-wider text-bg-primary transition-all hover:bg-primary/90 active:scale-[0.97]"
         >
           <Plus size={14} /> CREAR
