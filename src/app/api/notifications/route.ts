@@ -3,27 +3,31 @@ import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/supabase-server";
 
 export async function GET(request: NextRequest) {
-  const { user } = await getAuthUser(request);
-  if (!user) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  try {
+    const { user } = await getAuthUser(request);
+    if (!user) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    }
+
+    const dbUser = await prisma.user.findUnique({ where: { authId: user.id } });
+    if (!dbUser) {
+      return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
+    }
+
+    const notifications = await prisma.notification.findMany({
+      where: { userId: dbUser.id },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    });
+
+    const unreadCount = await prisma.notification.count({
+      where: { userId: dbUser.id, read: false },
+    });
+
+    return NextResponse.json({ notifications, unreadCount });
+  } catch (e) {
+    return NextResponse.json({ error: "Error interno" }, { status: 500 });
   }
-
-  const dbUser = await prisma.user.findUnique({ where: { authId: user.id } });
-  if (!dbUser) {
-    return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
-  }
-
-  const notifications = await prisma.notification.findMany({
-    where: { userId: dbUser.id },
-    orderBy: { createdAt: "desc" },
-    take: 50,
-  });
-
-  const unreadCount = await prisma.notification.count({
-    where: { userId: dbUser.id, read: false },
-  });
-
-  return NextResponse.json({ notifications, unreadCount });
 }
 
 export async function PATCH(request: NextRequest) {

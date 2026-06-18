@@ -251,7 +251,7 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({ initPoint, orderId: order.id });
   } catch (err) {
-    console.error("Error creating MP preference:", err);
+    log("error", "payment_mp_preference_failed", { error: err instanceof Error ? err.message : String(err) });
     return NextResponse.json({ error: "Error al crear preferencia de pago" }, { status: 500 });
   }
 }

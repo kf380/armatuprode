@@ -12,6 +12,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  try {
   const { user } = await getAuthUser(request);
 
   if (!user) {
@@ -170,6 +171,9 @@ export async function GET(
     myOrgRole: orgRole,
     permissions,
   });
+  } catch (e) {
+    return NextResponse.json({ error: "Error interno" }, { status: 500 });
+  }
 }
 
 export async function PATCH(

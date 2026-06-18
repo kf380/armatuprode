@@ -39,17 +39,16 @@ export async function GET(
   }
 
   // Latest GROUP_ACTIVATION orders for this group (ordered desc)
-  const orders = await prisma.paymentOrder.findMany({
+  const groupOrders = await prisma.paymentOrder.findMany({
     where: {
       type: "GROUP_ACTIVATION",
-      // metadata.groupId match — filter in memory since it's JSON
+      metadata: {
+        path: ["groupId"],
+        equals: id,
+      },
     },
     orderBy: { createdAt: "desc" },
     take: 50,
-  });
-  const groupOrders = orders.filter((o) => {
-    const meta = o.metadata as { groupId?: string } | null;
-    return meta?.groupId === id;
   });
 
   const planConfig = PLANS[group.planType];
