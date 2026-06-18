@@ -131,13 +131,14 @@ const badgeDefinitions: BadgeDefinition[] = [
     description: "Jugar 3+ torneos",
     target: 3,
     evaluate: async (userId) => {
-      const tournaments = await prisma.prediction.findMany({
-        where: { userId },
-        select: { match: { select: { tournamentId: true } } },
-        distinct: ["matchId"],
-      });
-      const uniqueTournaments = new Set(tournaments.map((t) => t.match.tournamentId));
-      return uniqueTournaments.size;
+      const tournaments = await prisma.$queryRaw<Array<{ tournamentId: string }>>`
+        SELECT DISTINCT m."tournamentId"
+        FROM "Prediction" p
+        JOIN "Match" m ON p."matchId" = m.id
+        WHERE p."userId" = ${userId}
+      `;
+      const uniqueTournaments = tournaments.length;
+      return uniqueTournaments;
     },
   },
   {

@@ -157,18 +157,23 @@ export async function POST(
     try {
       const xpRewards = calculateXpForPrediction(points, match.phase, breakdown.isExact, breakdown.isWinner);
       for (const reward of xpRewards) {
-        await prisma.xpEvent.create({
-          data: {
-            userId: pred.userId,
-            amount: reward.amount,
-            reason: reward.reason,
-            matchId: id,
-          },
+        const existingXp = await prisma.xpEvent.findFirst({
+          where: { userId: pred.userId, matchId: id, reason: reward.reason },
         });
-        await prisma.user.update({
-          where: { id: pred.userId },
-          data: { xp: { increment: reward.amount } },
-        });
+        if (!existingXp) {
+          await prisma.xpEvent.create({
+            data: {
+              userId: pred.userId,
+              amount: reward.amount,
+              reason: reward.reason,
+              matchId: id,
+            },
+          });
+          await prisma.user.update({
+            where: { id: pred.userId },
+            data: { xp: { increment: reward.amount } },
+          });
+        }
       }
     } catch (e) {
       log("warn", "finish_xp_grant_failed", { matchId: id, userId: pred.userId, error: e instanceof Error ? e.message : String(e) });
@@ -221,7 +226,7 @@ export async function POST(
         const recentPredictions = await prisma.prediction.findMany({
           where: {
             userId: pred.userId,
-            match: { status: "FINISHED" },
+            match: { OR: [{ status: "FINISHED" }, { id }] },
           },
           orderBy: { match: { matchDate: "desc" } },
           take: 5,
@@ -307,13 +312,18 @@ export async function POST(
           userDayPredictions.length === sameDay.length &&
           userDayPredictions.every((p) => p.points > 0)
         ) {
-          await prisma.xpEvent.create({
-            data: { userId, amount: 20, reason: "matchday_complete", matchId: id },
+          const existingMatchdayXp = await prisma.xpEvent.findFirst({
+            where: { userId, matchId: id, reason: "matchday_complete" },
           });
-          await prisma.user.update({
-            where: { id: userId },
-            data: { xp: { increment: 20 } },
-          });
+          if (!existingMatchdayXp) {
+            await prisma.xpEvent.create({
+              data: { userId, amount: 20, reason: "matchday_complete", matchId: id },
+            });
+            await prisma.user.update({
+              where: { id: userId },
+              data: { xp: { increment: 20 } },
+            });
+          }
 
           // +20 coins for matchday complete
           matchdayCoinPromises.push(

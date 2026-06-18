@@ -46,6 +46,8 @@ const NAME_ALIASES: Record<string, string> = {
   "czechia": "czech republic",
   "korea republic": "south korea",
   "bosnia herzegovina": "bosnia herz",
+  "united states": "usa",
+  "ir iran": "iran",
 };
 
 function normalize(s: string): string {
@@ -128,6 +130,8 @@ export async function syncFootballData(opts: SyncOptions): Promise<SyncSummary> 
     });
     const dbMatch = candidates.find(
       (c) => normalize(c.teamAName) === homeNorm && normalize(c.teamBName) === awayNorm,
+    ) ?? candidates.find(
+      (c) => normalize(c.teamAName) === awayNorm && normalize(c.teamBName) === homeNorm,
     );
 
     if (!dbMatch) {
