@@ -116,13 +116,16 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
 
   const liveMatches = useMemo(() => {
     const MAX_MATCH_DURATION = 3 * 60 * 60 * 1000; // 3h — covers 90' + ET + penalties
-    // Drop server-live matches that the dashboard already marks finished, or whose
-    // kickoff was > 3h ago (server sync delayed, match almost certainly over).
+    // Drop server-live matches that are already finished in the dashboard cache,
+    // or whose kickoff was > 3h ago (server sync delayed, match certainly over).
     const filteredServerLive = serverLive.filter((lm) => {
+      // Check dashboard cache first (most authoritative)
       const apiMatch = apiMatches.find((m) => m.id === lm.id);
       if (apiMatch?.status === "finished") return false;
-      if (apiMatch) {
-        const kickoff = new Date(apiMatch.matchDateIso).getTime();
+      // Use matchDate from the live response (most reliable — comes directly from DB)
+      const kickoffStr = lm.matchDate ?? apiMatch?.matchDateIso;
+      if (kickoffStr) {
+        const kickoff = new Date(kickoffStr).getTime();
         if (now - kickoff > MAX_MATCH_DURATION) return false;
       }
       return true;

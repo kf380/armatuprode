@@ -685,6 +685,7 @@ export interface LiveGroupRanking {
 
 export interface LiveMatch {
   id: string;
+  matchDate?: string | Date;
   teamACode: string;
   teamAName: string;
   teamAFlag: string;

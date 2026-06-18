@@ -96,6 +96,7 @@ export async function GET(request: NextRequest) {
         teamBCode: match.teamBCode,
         teamBName: match.teamBName,
         teamBFlag: match.teamBFlag,
+        matchDate: match.matchDate,
         scoreA: match.scoreA,
         scoreB: match.scoreB,
         minute: match.minute,
