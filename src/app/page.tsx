@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { AppProvider, useApp } from "@/lib/store";
 import { savePendingJoinCode, readPendingJoinCode } from "@/lib/join-code";
 import TabBar from "@/components/TabBar";
@@ -173,9 +173,12 @@ function AppContent() {
 
   // Keep-alive: mount each tab once on first visit, keep in DOM with CSS hidden.
   // Prevents hook re-runs and refetches on every tab switch.
-  const mountedTabsRef = useRef<Set<string>>(new Set([activeTab]));
+  const [mountedTabs, setMountedTabs] = useState<Set<string>>(() => new Set([activeTab]));
   useEffect(() => {
-    mountedTabsRef.current.add(activeTab);
+    setMountedTabs((prev) => {
+      if (prev.has(activeTab)) return prev;
+      return new Set([...prev, activeTab]);
+    });
   }, [activeTab]);
 
   // Full-screen screens (no tab bar)
@@ -209,7 +212,7 @@ function AppContent() {
         <main className="mx-auto max-w-lg md:max-w-2xl lg:max-w-4xl px-5 md:px-8 lg:px-12 pt-[calc(1.5rem+env(safe-area-inset-top))] pb-[calc(7rem+env(safe-area-inset-bottom))] md:pb-6 md:pt-20">
           {(["home", "matches", "groups", "ranking", "profile"] as const).map((tab) => (
             <div key={tab} className={tab === activeTab ? "" : "hidden"}>
-              {mountedTabsRef.current.has(tab) && (
+              {mountedTabs.has(tab) && (
                 tab === "home" ? <HomeScreen onNavigate={handleNavigate} /> :
                 tab === "matches" ? <MatchesScreen /> :
                 tab === "groups" ? <GroupsScreen /> :
