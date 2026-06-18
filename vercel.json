@@ -10,10 +10,6 @@
   ],
   "crons": [
     {
-      "path": "/api/cron/sync-results",
-      "schedule": "*/5 * * * *"
-    },
-    {
       "path": "/api/cron/expire-coins",
       "schedule": "0 3 * * *"
     },
