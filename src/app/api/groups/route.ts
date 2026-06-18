@@ -7,6 +7,7 @@ import { PLANS, isPublicPlan, resolveLimits } from "@/lib/plans";
 import type { GroupType, PlanType } from "@prisma/client";
 import { log } from "@/lib/log";
 import { trackServer } from "@/lib/analytics-server";
+import { readGroupsCache, writeGroupsCache, invalidateGroupsCache } from "@/lib/dashboard-cache";
 
 export async function GET(request: NextRequest) {
   const { user } = await getAuthUser(request);
@@ -22,6 +23,9 @@ export async function GET(request: NextRequest) {
   if (!dbUser) {
     return NextResponse.json({ groups: [] });
   }
+
+  const cached = await readGroupsCache<object>(dbUser.id);
+  if (cached) return NextResponse.json(cached);
 
   const memberships = await prisma.groupMember.findMany({
     where: { userId: dbUser.id },
@@ -63,7 +67,9 @@ export async function GET(request: NextRequest) {
     organizationId: m.group.organizationId,
   }));
 
-  return NextResponse.json({ groups });
+  const payload = { groups };
+  await writeGroupsCache(dbUser.id, payload);
+  return NextResponse.json(payload);
 }
 
 export async function POST(request: NextRequest) {
@@ -269,5 +275,6 @@ export async function POST(request: NextRequest) {
     plan_type: group.planType,
     money_mode: group.moneyMode,
   });
+  void invalidateGroupsCache(dbUser.id);
   return NextResponse.json({ group }, { status: 201 });
 }

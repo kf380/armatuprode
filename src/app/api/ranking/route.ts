@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/supabase-server";
+import { readRankingCache, writeRankingCache } from "@/lib/dashboard-cache";
 
 export async function GET(request: NextRequest) {
   const { user } = await getAuthUser(request);
@@ -9,37 +10,50 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  const dbUser = await prisma.user.findUnique({
-    where: { authId: user.id },
-  });
-
   const { searchParams } = new URL(request.url);
   const tournamentIdParam = searchParams.get("tournamentId");
 
-  const tournament = tournamentIdParam
-    ? await prisma.tournament.findUnique({ where: { id: tournamentIdParam } })
-    : await prisma.tournament.findFirst({ where: { active: true } });
+  // Parallelize: user lookup + tournament lookup don't depend on each other.
+  const [dbUser, tournament] = await Promise.all([
+    prisma.user.findUnique({ where: { authId: user.id } }),
+    tournamentIdParam
+      ? prisma.tournament.findUnique({ where: { id: tournamentIdParam } })
+      : prisma.tournament.findFirst({ where: { active: true } }),
+  ]);
 
   if (!tournament) {
     return NextResponse.json({ ranking: [], userPosition: null, totalPlayers: 0 });
   }
 
-  // Aggregate points per user for the active tournament
-  const pointsAgg = await prisma.prediction.groupBy({
-    by: ["userId"],
-    where: { match: { tournamentId: tournament.id } },
-    _sum: { points: true },
-    orderBy: { _sum: { points: "desc" } },
-    take: 100,
-  });
+  // Cache hit: return immediately without touching the DB.
+  const cacheKey = dbUser?.id ?? "anon";
+  const cached = await readRankingCache<object>(tournament.id, cacheKey);
+  if (cached) return NextResponse.json(cached);
 
-  // Get all user IDs for the top 100
+  // Parallelize: top-100 aggregation + total distinct players count.
+  const [pointsAgg, totalResult] = await Promise.all([
+    prisma.prediction.groupBy({
+      by: ["userId"],
+      where: { match: { tournamentId: tournament.id } },
+      _sum: { points: true },
+      orderBy: { _sum: { points: "desc" } },
+      take: 100,
+    }),
+    prisma.$queryRaw<[{ count: bigint }]>`
+      SELECT COUNT(DISTINCT p."userId")::bigint AS count
+      FROM "Prediction" p
+      JOIN "Match" m ON p."matchId" = m.id
+      WHERE m."tournamentId" = ${tournament.id}
+    `,
+  ]);
+
+  const totalPlayers = Number(totalResult[0]?.count ?? 0);
+
   const userIds = pointsAgg.map((p) => p.userId);
   const users = await prisma.user.findMany({
     where: { id: { in: userIds } },
     select: { id: true, name: true, avatar: true, country: true, xp: true },
   });
-
   const usersMap = Object.fromEntries(users.map((u) => [u.id, u]));
 
   const ranking = pointsAgg.map((p, i) => {
@@ -55,29 +69,21 @@ export async function GET(request: NextRequest) {
     };
   });
 
-  // Total players who have predictions
-  const totalPlayers = await prisma.prediction.groupBy({
-    by: ["userId"],
-    where: { match: { tournamentId: tournament.id } },
-  });
-
-  // Find current user position
+  // Find current user position.
   let userPosition = null;
   if (dbUser) {
     const existingInTop = ranking.find((r) => r.userId === dbUser.id);
     if (existingInTop) {
       userPosition = existingInTop;
     } else {
-      // User not in top 100, compute their position
       const userPoints = await prisma.prediction.aggregate({
         where: { userId: dbUser.id, match: { tournamentId: tournament.id } },
         _sum: { points: true },
       });
       const pts = userPoints._sum.points || 0;
 
-      // Count users with more points
       const above = await prisma.$queryRaw<[{ count: bigint }]>`
-        SELECT COUNT(DISTINCT p."userId") as count
+        SELECT COUNT(DISTINCT p."userId")::bigint AS count
         FROM "Prediction" p
         JOIN "Match" m ON p."matchId" = m.id
         WHERE m."tournamentId" = ${tournament.id}
@@ -85,10 +91,8 @@ export async function GET(request: NextRequest) {
         HAVING SUM(p.points) > ${pts}
       `;
 
-      const pos = above.length > 0 ? Number(above.length) + 1 : totalPlayers.length > 0 ? totalPlayers.length : 1;
-
       userPosition = {
-        position: pos,
+        position: above.length > 0 ? Number(above.length) + 1 : totalPlayers || 1,
         userId: dbUser.id,
         name: dbUser.name,
         avatar: dbUser.avatar,
@@ -99,9 +103,8 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({
-    ranking,
-    userPosition,
-    totalPlayers: totalPlayers.length,
-  });
+  const payload = { ranking, userPosition, totalPlayers };
+  await writeRankingCache(tournament.id, cacheKey, payload);
+
+  return NextResponse.json(payload);
 }
