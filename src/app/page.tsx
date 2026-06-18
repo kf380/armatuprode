@@ -144,6 +144,15 @@ function AppContent() {
     setActiveTab(tab);
   };
 
+  // Prefetch all tab chunks right after first render so the first tap on any
+  // tab doesn't stall waiting for the JS download.
+  useEffect(() => {
+    import("@/components/screens/MatchesScreen");
+    import("@/components/screens/GroupsScreen");
+    import("@/components/screens/RankingScreen");
+    import("@/components/screens/ProfileScreen");
+  }, []);
+
   // Keep-alive: track visited tabs in a ref so the update is synchronous during
   // render (no extra paint cycle like useState+useEffect would cause).
   const mountedTabsRef = useRef<Set<string>>(new Set([activeTab]));
