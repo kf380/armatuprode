@@ -30,24 +30,16 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  // Single trip to DB: predictions (with match) + global aggregate in parallel.
-  const [predictions, allPoints] = await Promise.all([
-    prisma.prediction.findMany({
-      where: { userId: dbUser.id, match: { tournamentId: tournament.id } },
-      select: {
-        scoreA: true,
-        scoreB: true,
-        points: true,
-        match: { select: { status: true, scoreA: true, scoreB: true } },
-      },
-      orderBy: { match: { matchDate: "desc" } },
-    }),
-    prisma.prediction.groupBy({
-      by: ["userId"],
-      where: { match: { tournamentId: tournament.id } },
-      _sum: { points: true },
-    }),
-  ]);
+  const predictions = await prisma.prediction.findMany({
+    where: { userId: dbUser.id, match: { tournamentId: tournament.id } },
+    select: {
+      scoreA: true,
+      scoreB: true,
+      points: true,
+      match: { select: { status: true, scoreA: true, scoreB: true } },
+    },
+    orderBy: { match: { matchDate: "desc" } },
+  });
 
   const totalPredictions = predictions.length;
   const totalPoints = predictions.reduce((sum, p) => sum + p.points, 0);
@@ -66,8 +58,15 @@ export async function GET(request: NextRequest) {
     else break;
   }
 
-  const usersAbove = allPoints.filter((a) => (a._sum.points || 0) > totalPoints).length;
-  const globalRank = usersAbove + 1;
+  const above = await prisma.$queryRaw<[{ count: bigint }]>`
+    SELECT COUNT(DISTINCT p."userId")::bigint AS count
+    FROM "Prediction" p
+    JOIN "Match" m ON p."matchId" = m.id
+    WHERE m."tournamentId" = ${tournament.id}
+    GROUP BY p."userId"
+    HAVING SUM(p.points) > ${totalPoints}
+  `;
+  const globalRank = Number(above.length) + 1;
 
   return NextResponse.json({
     stats: {

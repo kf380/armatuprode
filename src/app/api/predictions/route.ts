@@ -135,6 +135,12 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // Re-verify match status right before upsert
+  const freshMatch = await prisma.match.findUnique({ where: { id: matchId }, select: { status: true, matchDate: true } });
+  if (!freshMatch || freshMatch.status !== "UPCOMING" || new Date(freshMatch.matchDate) <= new Date()) {
+    return NextResponse.json({ error: "Las predicciones están cerradas para este partido" }, { status: 403 });
+  }
+
   // Check if this is a new prediction (for XP + coins)
   const existing = await prisma.prediction.findUnique({
     where: { userId_matchId: { userId: dbUser.id, matchId } },
