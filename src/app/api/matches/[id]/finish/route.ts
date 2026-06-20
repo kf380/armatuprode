@@ -8,7 +8,7 @@ import { WalletLotSource } from "@prisma/client";
 import { log, logSettled } from "@/lib/log";
 import { rateLimit, hashSecret } from "@/lib/ratelimit";
 import { adminKeyFromRequest, isValidAdmin } from "@/lib/admin-auth";
-import { invalidateGroupDetailCache } from "@/lib/dashboard-cache";
+import { invalidateGroupDetailCache, invalidateGlobalDashCache } from "@/lib/dashboard-cache";
 import { logAdminAction } from "@/lib/admin-audit";
 
 function isKnockout(phase: string): boolean {
@@ -366,6 +366,7 @@ export async function POST(
       await Promise.allSettled([
         ...groups.map((g) => createChatSystemEvent(g.id, text, "⚽")),
         ...groups.map((g) => invalidateGroupDetailCache(g.id)),
+        invalidateGlobalDashCache(match.tournamentId),
       ]);
     })(),
   );

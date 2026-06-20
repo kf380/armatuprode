@@ -4,6 +4,7 @@ import { rateLimit, hashSecret } from "@/lib/ratelimit";
 import { adminKeyFromRequest, isValidAdmin } from "@/lib/admin-auth";
 import { logAdminAction } from "@/lib/admin-audit";
 import { log, logSettled } from "@/lib/log";
+import { invalidateGlobalDashCache } from "@/lib/dashboard-cache";
 
 export async function POST(
   request: NextRequest,
@@ -91,6 +92,8 @@ export async function POST(
       log("warn", "match_gol_push_dispatch_failed", { matchId: id, error: e instanceof Error ? e.message : String(e) });
     }
   }
+
+  void invalidateGlobalDashCache(match.tournamentId);
 
   return NextResponse.json({ ok: true, matchId: id, gol: !!golScoredBy });
 }

@@ -42,6 +42,36 @@ export async function invalidateDashboardCache(userId: string): Promise<void> {
   }
 }
 
+// ── Global dashboard cache ─────────────────────────────────────────────────
+// Stores tournament + all matches + allPointsAgg (the 3 expensive global
+// queries). User-specific data (predictions, groups, badges) is fetched
+// separately since it's fast. Invalidated when a match is finished or goes live.
+const GLOBAL_DASH_PREFIX = "global-dash:v1:";
+const GLOBAL_DASH_TTL = 5 * 60; // 5 min — aligns with cron cadence
+
+export async function readGlobalDashCache<T>(tournamentId: string): Promise<T | null> {
+  if (!redis) return null;
+  try {
+    return await redis.get<T>(`${GLOBAL_DASH_PREFIX}${tournamentId}`) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function writeGlobalDashCache<T>(tournamentId: string, data: T): Promise<void> {
+  if (!redis) return;
+  try {
+    await redis.set(`${GLOBAL_DASH_PREFIX}${tournamentId}`, data, { ex: GLOBAL_DASH_TTL });
+  } catch { /* swallow */ }
+}
+
+export async function invalidateGlobalDashCache(tournamentId: string): Promise<void> {
+  if (!redis) return;
+  try {
+    await redis.del(`${GLOBAL_DASH_PREFIX}${tournamentId}`);
+  } catch { /* swallow */ }
+}
+
 // ── Ranking cache ──────────────────────────────────────────────────────────
 // Ranking changes only when a match finishes (scored by /finish). TTL 60s as
 // a safety net; the /finish endpoint calls invalidateRankingCache explicitly.
