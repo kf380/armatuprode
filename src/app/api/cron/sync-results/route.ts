@@ -4,6 +4,8 @@ import { syncFootballData } from "@/lib/sync-football-data";
 import { validateProductionEnv } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 
+export const maxDuration = 60;
+
 export async function GET(request: NextRequest) {
   validateProductionEnv();
   const authHeader = request.headers.get("authorization");
@@ -60,6 +62,7 @@ export async function GET(request: NextRequest) {
       baseUrl,
       adminKey,
       fdToken,
+      prisma,
     });
     return NextResponse.json({ ok: true, summary });
   } catch (e) {

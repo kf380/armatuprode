@@ -87,12 +87,22 @@ export async function syncFootballData(opts: SyncOptions): Promise<SyncSummary> 
   const closePrismaOnExit = !opts.prisma;
 
   const today = new Date();
-  const dateFrom = new Date(today.getTime() - daysBack * 86_400_000).toISOString().slice(0, 10);
-  const dateTo = new Date(today.getTime() + daysForward * 86_400_000).toISOString().slice(0, 10);
+  const windowStart = new Date(today.getTime() - daysBack * 86_400_000);
+  const windowEnd = new Date(today.getTime() + daysForward * 86_400_000);
+  const dateFrom = windowStart.toISOString().slice(0, 10);
+  const dateTo = windowEnd.toISOString().slice(0, 10);
 
-  const fdResp = await fetch(`${FD_URL}?dateFrom=${dateFrom}&dateTo=${dateTo}`, {
-    headers: { "X-Auth-Token": fdToken },
-  });
+  // Fetch football-data.org + all DB matches for the window in parallel.
+  const [fdResp, dbMatches] = await Promise.all([
+    fetch(`${FD_URL}?dateFrom=${dateFrom}&dateTo=${dateTo}`, {
+      headers: { "X-Auth-Token": fdToken },
+    }),
+    prisma.match.findMany({
+      where: { matchDate: { gte: windowStart, lte: windowEnd } },
+      select: { id: true, teamAName: true, teamBName: true, status: true, matchDate: true },
+    }),
+  ]);
+
   const quotaLeftMinute = fdResp.headers.get("x-requests-available-minute");
 
   if (!fdResp.ok) {
@@ -101,6 +111,16 @@ export async function syncFootballData(opts: SyncOptions): Promise<SyncSummary> 
   }
 
   const fdData = (await fdResp.json()) as { matches: FdMatch[] };
+
+  // Build a lookup map keyed by "YYYY-MM-DD|normA|normB" for O(1) matching.
+  const dbByKey = new Map<string, typeof dbMatches[number]>();
+  for (const m of dbMatches) {
+    const d = m.matchDate.toISOString().slice(0, 10);
+    const na = normalize(m.teamAName);
+    const nb = normalize(m.teamBName);
+    dbByKey.set(`${d}|${na}|${nb}`, m);
+    dbByKey.set(`${d}|${nb}|${na}`, m); // bidirectional
+  }
 
   const summary: SyncSummary = {
     finished: 0,
@@ -112,31 +132,28 @@ export async function syncFootballData(opts: SyncOptions): Promise<SyncSummary> 
     details: [],
   };
 
+  // Collect all HTTP actions to fire in parallel after the loop.
+  type PendingAction = {
+    label: string;
+    kind: "finish" | "live";
+    url: string;
+    body: Record<string, unknown>;
+  };
+  const pending: PendingAction[] = [];
+
   for (const fd of fdData.matches) {
     const label = `${fd.homeTeam.name} vs ${fd.awayTeam.name}`;
     const sa = fd.score.fullTime.home;
     const sb = fd.score.fullTime.away;
 
-    // Match by date (UTC calendar day) + normalized team names.
+    const fdDate = new Date(fd.utcDate);
+    const dateKey = fdDate.toISOString().slice(0, 10);
     const homeNorm = normalize(fd.homeTeam.name);
     const awayNorm = normalize(fd.awayTeam.name);
-    const fdDate = new Date(fd.utcDate);
-    const dayStart = new Date(Date.UTC(fdDate.getUTCFullYear(), fdDate.getUTCMonth(), fdDate.getUTCDate()));
-    const dayEnd = new Date(dayStart.getTime() + 86_400_000);
 
-    const candidates = await prisma.match.findMany({
-      where: { matchDate: { gte: dayStart, lt: dayEnd } },
-      select: { id: true, teamAName: true, teamBName: true, status: true },
-    });
-    const dbMatch = candidates.find(
-      (c) => normalize(c.teamAName) === homeNorm && normalize(c.teamBName) === awayNorm,
-    ) ?? candidates.find(
-      (c) => normalize(c.teamAName) === awayNorm && normalize(c.teamBName) === homeNorm,
-    );
+    const dbMatch = dbByKey.get(`${dateKey}|${homeNorm}|${awayNorm}`);
 
     if (!dbMatch) {
-      // Only flag as unmatched for active states; TIMED far-future matches
-      // are expected to have no counterpart yet during cron sweeps.
       if (fd.status === "FINISHED" || fd.status === "IN_PLAY" || fd.status === "PAUSED") {
         summary.unmatched++;
         summary.details.push({ match: label, action: "unmatched" });
@@ -159,24 +176,17 @@ export async function syncFootballData(opts: SyncOptions): Promise<SyncSummary> 
         summary.details.push({ match: label, action: "finish", reason: `dry ${sa}-${sb}` });
         continue;
       }
-      const resp = await fetch(`${baseUrl}/api/matches/${dbMatch.id}/finish`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminKey}` },
-        body: JSON.stringify({ scoreA: sa, scoreB: sb }),
+      pending.push({
+        label,
+        kind: "finish",
+        url: `${baseUrl}/api/matches/${dbMatch.id}/finish`,
+        body: { scoreA: sa, scoreB: sb },
       });
-      if (resp.ok) {
-        summary.finished++;
-        summary.details.push({ match: label, action: "finish", reason: `${sa}-${sb}` });
-      } else {
-        summary.failed++;
-        summary.details.push({ match: label, action: "fail", reason: `finish HTTP ${resp.status}` });
-      }
       continue;
     }
 
     if (fd.status === "IN_PLAY" || fd.status === "PAUSED") {
       if (dbMatch.status === "FINISHED") {
-        // Already finished locally; don't reopen.
         summary.skipped++;
         continue;
       }
@@ -190,17 +200,45 @@ export async function syncFootballData(opts: SyncOptions): Promise<SyncSummary> 
         summary.details.push({ match: label, action: "live", reason: `dry ${updateScoreA}-${updateScoreB} ${minute ?? "-"}'` });
         continue;
       }
-      const resp = await fetch(`${baseUrl}/api/matches/${dbMatch.id}/update-live`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminKey}` },
-        body: JSON.stringify({ scoreA: updateScoreA, scoreB: updateScoreB, minute, period }),
+      pending.push({
+        label,
+        kind: "live",
+        url: `${baseUrl}/api/matches/${dbMatch.id}/update-live`,
+        body: { scoreA: updateScoreA, scoreB: updateScoreB, minute, period },
       });
-      if (resp.ok) {
-        summary.live++;
-        summary.details.push({ match: label, action: "live", reason: `${updateScoreA}-${updateScoreB} ${minute ?? "-"}'` });
+    }
+  }
+
+  // Fire all HTTP updates in parallel.
+  if (pending.length > 0) {
+    const results = await Promise.allSettled(
+      pending.map((p) =>
+        fetch(p.url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${adminKey}` },
+          body: JSON.stringify(p.body),
+        }),
+      ),
+    );
+    for (let i = 0; i < pending.length; i++) {
+      const p = pending[i];
+      const r = results[i];
+      if (r.status === "fulfilled" && r.value.ok) {
+        if (p.kind === "finish") {
+          summary.finished++;
+          const { scoreA, scoreB } = p.body as { scoreA: number; scoreB: number };
+          summary.details.push({ match: p.label, action: "finish", reason: `${scoreA}-${scoreB}` });
+        } else {
+          summary.live++;
+          const { scoreA, scoreB, minute } = p.body as { scoreA: number; scoreB: number; minute: number | null };
+          summary.details.push({ match: p.label, action: "live", reason: `${scoreA}-${scoreB} ${minute ?? "-"}'` });
+        }
       } else {
         summary.failed++;
-        summary.details.push({ match: label, action: "fail", reason: `live HTTP ${resp.status}` });
+        const reason = r.status === "rejected"
+          ? String(r.reason)
+          : `${p.kind} HTTP ${r.value.status}`;
+        summary.details.push({ match: p.label, action: "fail", reason });
       }
     }
   }
