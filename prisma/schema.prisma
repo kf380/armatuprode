@@ -43,6 +43,7 @@ model User {
   chatMutes          ChatMute[]
   paymentOrders      PaymentOrder[]
   premiumMemberships PremiumMembership[]
+  tournamentPicks    TournamentPick[]
 }
 
 model Tournament {
@@ -62,6 +63,7 @@ model Tournament {
   groups             Group[]
   teams              Team[]
   premiumMemberships PremiumMembership[]
+  tournamentPicks    TournamentPick[]
 }
 
 enum TournamentType {
@@ -654,6 +656,25 @@ model Team {
 
   @@unique([tournamentId, code])
   @@index([tournamentId, groupCode])
+}
+
+// --- Tournament Picks (champion + top scorer pre-tournament guess) ---
+
+model TournamentPick {
+  id           String   @id @default(uuid())
+  userId       String
+  tournamentId String
+  champion     String?  // team code (e.g. "ARG")
+  topScorer    String?  // player name free text
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user       User       @relation(fields: [userId], references: [id])
+  tournament Tournament @relation(fields: [tournamentId], references: [id])
+
+  @@unique([userId, tournamentId])
+  @@index([userId])
+  @@index([tournamentId])
 }
 
 // --- Admin audit log ---

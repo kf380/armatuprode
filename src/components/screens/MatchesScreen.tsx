@@ -8,6 +8,8 @@ import { useDashboard, apiToScreenMatch, type ScreenMatch } from "@/lib/hooks";
 import { getPredictionContent, getExactResultContent } from "@/lib/share";
 import ShareButton from "@/components/ShareButton";
 import { calendarDayInTz, classifyMatchDay, formatMatchDayLabel } from "@/lib/format-date";
+import BracketView from "@/components/BracketView";
+import TournamentPicksCard from "@/components/TournamentPicksCard";
 
 const stagger = {
   hidden: {},
@@ -157,8 +159,18 @@ export default function MatchesScreen() {
     const t = setTimeout(() => setLockedToast(null), 3000);
     return () => clearTimeout(t);
   }, [lockedToast]);
+  const [viewMode, setViewMode] = useState<"list" | "bracket">("list");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  const uniqueTeams = useMemo(() => {
+    const seen = new Map<string, { code: string; name: string; flag: string }>();
+    for (const m of matches) {
+      if (!seen.has(m.teamA.code)) seen.set(m.teamA.code, m.teamA);
+      if (!seen.has(m.teamB.code)) seen.set(m.teamB.code, m.teamB);
+    }
+    return [...seen.values()];
+  }, [matches]);
 
   const allUpcoming = useMemo(() => {
     const now = Date.now();
@@ -339,10 +351,46 @@ export default function MatchesScreen() {
   return (
     <div className="space-y-5 pb-6">
       {/* Header */}
-      <motion.div variants={fadeUp} className="pt-2">
-        <h1 className="font-display text-xl font-bold tracking-widest">PARTIDOS</h1>
-        <p className="mt-0.5 text-base text-text-secondary">{tournamentName}</p>
+      <motion.div variants={fadeUp} className="pt-2 flex items-start justify-between">
+        <div>
+          <h1 className="font-display text-xl font-bold tracking-widest">PARTIDOS</h1>
+          <p className="mt-0.5 text-base text-text-secondary">{tournamentName}</p>
+        </div>
+        <div className="flex rounded-xl border border-border-default overflow-hidden shrink-0">
+          <button
+            onClick={() => setViewMode("list")}
+            className={`px-3 py-1.5 font-display text-[10px] font-bold tracking-wider transition-colors ${
+              viewMode === "list" ? "bg-primary text-bg-primary" : "text-text-muted"
+            }`}
+          >
+            LISTA
+          </button>
+          <button
+            onClick={() => setViewMode("bracket")}
+            className={`px-3 py-1.5 font-display text-[10px] font-bold tracking-wider transition-colors border-l border-border-default ${
+              viewMode === "bracket" ? "bg-primary text-bg-primary" : "text-text-muted"
+            }`}
+          >
+            BRACKET
+          </button>
+        </div>
       </motion.div>
+
+      {/* Bracket view */}
+      {viewMode === "bracket" && (
+        <motion.div variants={fadeUp}>
+          <BracketView matches={matches} />
+        </motion.div>
+      )}
+
+      {viewMode === "list" && (
+        <>
+      {/* Tournament picks card */}
+      {uniqueTeams.length > 0 && (
+        <motion.div variants={fadeUp}>
+          <TournamentPicksCard teams={uniqueTeams} />
+        </motion.div>
+      )}
 
       {/* Date filter pills (row 1) */}
       <motion.div variants={fadeUp} className="flex gap-2 overflow-x-auto -mx-1 px-1 pb-1">
@@ -815,6 +863,9 @@ export default function MatchesScreen() {
             ))}
           </div>
         </motion.div>
+      )}
+
+        </>
       )}
 
       {/* Prediction Modal */}

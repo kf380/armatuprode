@@ -59,7 +59,7 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
   const { data: dash, loading: dashLoading, refetch: refetchDash } = useDashboard();
   // Live polling cada 90s para el banner LIVE. Se mantiene separado del dashboard
   // porque tiene cadencia propia más agresiva.
-  const { matches: livePolled, refetch: refetchLive } = useLiveMatches(90000);
+  const { matches: livePolled, fetched: liveFetched, refetch: refetchLive } = useLiveMatches(90000);
 
   // Helper para mapear dashboard.matches (raw API shape) al ScreenMatch que
   // espera el resto del componente (lowercase status + formatted time).
@@ -93,9 +93,22 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
   );
   const apiGroups = dash?.groups ?? [];
   const stats = dash?.stats ?? null;
-  // Prefer live polled (más fresco). Fallback a dashboard's snapshot mientras
-  // useLiveMatches no termina su primer fetch.
-  const serverLive = livePolled.length > 0 ? livePolled : (dash?.liveMatches ?? []);
+  // Once liveFetched is true, livePolled is authoritative (even when empty).
+  // Before the first fetch completes, fall back to the dashboard snapshot so
+  // the live banner renders immediately on warm sessions.
+  const serverLive = liveFetched ? livePolled : (dash?.liveMatches ?? []);
+
+  // When live match count drops to zero (match ended), force a dashboard
+  // refresh so apiMatch.status flips to "finished" and all derived UI updates.
+  const prevLiveCountRef = useRef(0);
+  useEffect(() => {
+    const cur = livePolled.length;
+    const prev = prevLiveCountRef.current;
+    prevLiveCountRef.current = cur;
+    if (liveFetched && prev > 0 && cur === 0) {
+      refetchDash();
+    }
+  }, [livePolled.length, liveFetched, refetchDash]);
 
   // Computed once per render; updated by the 60s ticker via setMinuteTick.
   const now = Date.now();

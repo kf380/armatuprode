@@ -12,6 +12,7 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const tournamentIdParam = searchParams.get("tournamentId");
+  const phaseParam = searchParams.get("phase"); // optional phase filter
 
   // Parallelize: user lookup + tournament lookup don't depend on each other.
   const [dbUser, tournament] = await Promise.all([
@@ -26,25 +27,37 @@ export async function GET(request: NextRequest) {
   }
 
   // Cache hit: return immediately without touching the DB.
-  const cacheKey = dbUser?.id ?? "anon";
+  const cacheKey = `${dbUser?.id ?? "anon"}:${phaseParam ?? "all"}`;
   const cached = await readRankingCache<object>(tournament.id, cacheKey);
   if (cached) return NextResponse.json(cached);
+
+  const matchWhere = phaseParam
+    ? { tournamentId: tournament.id, phase: phaseParam as never }
+    : { tournamentId: tournament.id };
 
   // Parallelize: top-100 aggregation + total distinct players count.
   const [pointsAgg, totalResult] = await Promise.all([
     prisma.prediction.groupBy({
       by: ["userId"],
-      where: { match: { tournamentId: tournament.id } },
+      where: { match: matchWhere },
       _sum: { points: true },
       orderBy: { _sum: { points: "desc" } },
       take: 100,
     }),
-    prisma.$queryRaw<[{ count: bigint }]>`
-      SELECT COUNT(DISTINCT p."userId")::bigint AS count
-      FROM "Prediction" p
-      JOIN "Match" m ON p."matchId" = m.id
-      WHERE m."tournamentId" = ${tournament.id}
-    `,
+    phaseParam
+      ? prisma.$queryRaw<[{ count: bigint }]>`
+          SELECT COUNT(DISTINCT p."userId")::bigint AS count
+          FROM "Prediction" p
+          JOIN "Match" m ON p."matchId" = m.id
+          WHERE m."tournamentId" = ${tournament.id}
+            AND m."phase" = ${phaseParam}
+        `
+      : prisma.$queryRaw<[{ count: bigint }]>`
+          SELECT COUNT(DISTINCT p."userId")::bigint AS count
+          FROM "Prediction" p
+          JOIN "Match" m ON p."matchId" = m.id
+          WHERE m."tournamentId" = ${tournament.id}
+        `,
   ]);
 
   const totalPlayers = Number(totalResult[0]?.count ?? 0);
@@ -77,19 +90,29 @@ export async function GET(request: NextRequest) {
       userPosition = existingInTop;
     } else {
       const userPoints = await prisma.prediction.aggregate({
-        where: { userId: dbUser.id, match: { tournamentId: tournament.id } },
+        where: { userId: dbUser.id, match: matchWhere },
         _sum: { points: true },
       });
       const pts = userPoints._sum.points || 0;
 
-      const above = await prisma.$queryRaw<[{ count: bigint }]>`
-        SELECT COUNT(DISTINCT p."userId")::bigint AS count
-        FROM "Prediction" p
-        JOIN "Match" m ON p."matchId" = m.id
-        WHERE m."tournamentId" = ${tournament.id}
-        GROUP BY p."userId"
-        HAVING SUM(p.points) > ${pts}
-      `;
+      const above = phaseParam
+        ? await prisma.$queryRaw<[{ count: bigint }]>`
+            SELECT COUNT(DISTINCT p."userId")::bigint AS count
+            FROM "Prediction" p
+            JOIN "Match" m ON p."matchId" = m.id
+            WHERE m."tournamentId" = ${tournament.id}
+              AND m."phase" = ${phaseParam}
+            GROUP BY p."userId"
+            HAVING SUM(p.points) > ${pts}
+          `
+        : await prisma.$queryRaw<[{ count: bigint }]>`
+            SELECT COUNT(DISTINCT p."userId")::bigint AS count
+            FROM "Prediction" p
+            JOIN "Match" m ON p."matchId" = m.id
+            WHERE m."tournamentId" = ${tournament.id}
+            GROUP BY p."userId"
+            HAVING SUM(p.points) > ${pts}
+          `;
 
       userPosition = {
         position: above.length > 0 ? Number(above.length) + 1 : totalPlayers || 1,

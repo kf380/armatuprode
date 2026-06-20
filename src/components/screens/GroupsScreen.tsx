@@ -54,6 +54,23 @@ export default function GroupsScreen() {
   const [upcomingFriends, setUpcomingFriends] = useState<UpcomingMatchResp | null>(null);
   type Rival = { userId: string; name: string; avatar: string; diff: number; myTotal: number; theirTotal: number; youWonLast5: number; theyWonLast5: number; tieLast5: number };
   const [rivals, setRivals] = useState<Rival[]>([]);
+
+  // H2H modal
+  const [h2hUserId, setH2hUserId] = useState<string | null>(null);
+  type H2HMatch = {
+    matchId: string; teamACode: string; teamAName: string; teamAFlag: string;
+    teamBCode: string; teamBName: string; teamBFlag: string;
+    phase: string; scoreA: number | null; scoreB: number | null; status: string;
+    myPrediction: { scoreA: number; scoreB: number; points: number } | null;
+    rivalPrediction: { scoreA: number; scoreB: number; points: number } | null;
+  };
+  type H2HData = {
+    me: { id: string; name: string; avatar: string; totalPoints: number };
+    rival: { id: string; name: string; avatar: string; totalPoints: number };
+    matches: H2HMatch[];
+  };
+  const [h2hData, setH2hData] = useState<H2HData | null>(null);
+  const [h2hLoading, setH2hLoading] = useState(false);
   useEffect(() => {
     if (!selectedGroup) { setUpcomingFriends(null); setRivals([]); return; }
     let cancelled = false;
@@ -77,7 +94,23 @@ export default function GroupsScreen() {
   }, [selectedGroup, authFetch]);
 
   useEffect(() => {
+    if (!h2hUserId || !selectedGroup) { setH2hData(null); return; }
+    let cancelled = false;
+    (async () => {
+      setH2hLoading(true);
+      try {
+        const res = await authFetch(`/api/groups/${selectedGroup}/h2h?vs=${h2hUserId}`);
+        if (res.ok && !cancelled) setH2hData(await res.json());
+      } catch { /* best-effort */ } finally {
+        if (!cancelled) setH2hLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [h2hUserId, selectedGroup, authFetch]);
+
+  useEffect(() => {
     setRankingDate(null);
+    setH2hUserId(null);
   }, [selectedGroup]);
   const { events: activityEvents, loading: activityLoading, loadMore, hasMore } = useGroupActivity(selectedGroup);
   const [groupTab, setGroupTab] = useState<GroupTab>("ranking");
@@ -610,14 +643,15 @@ export default function GroupsScreen() {
                 <motion.div
                   key={player.userId}
                   variants={fadeUp}
+                  onClick={() => { if (!isUser) setH2hUserId(player.userId); }}
                   className={`flex items-center gap-3 rounded-xl border p-3 transition-all ${
                     isUser
                       ? "border-primary/40 bg-primary/5 shadow-[0_0_15px_rgba(16,185,129,0.1)]"
                       : isLeader
-                      ? "border-accent/30 bg-accent/5"
+                      ? "border-accent/30 bg-accent/5 cursor-pointer active:scale-[0.99]"
                       : isLast
-                      ? "border-danger/20 bg-danger/5"
-                      : "border-border-default bg-bg-surface"
+                      ? "border-danger/20 bg-danger/5 cursor-pointer active:scale-[0.99]"
+                      : "border-border-default bg-bg-surface cursor-pointer hover:border-primary/20 active:scale-[0.99]"
                   }`}
                 >
                   <div className={`w-7 text-center font-display text-sm font-bold ${
@@ -1073,6 +1107,106 @@ export default function GroupsScreen() {
           label="INVITAR AMIGOS"
           variant="primary"
         />
+
+        {/* H2H modal */}
+        <AnimatePresence>
+          {h2hUserId && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[60] flex items-end md:items-center justify-center bg-black/70 backdrop-blur-sm"
+              onClick={() => setH2hUserId(null)}
+            >
+              <motion.div
+                initial={{ y: 400 }}
+                animate={{ y: 0 }}
+                exit={{ y: 400 }}
+                transition={{ type: "spring", damping: 25 }}
+                onClick={(e) => e.stopPropagation()}
+                className="w-full rounded-t-3xl md:rounded-3xl border-t border-x md:border border-border-default bg-bg-surface px-4 py-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] md:p-6 md:max-w-md max-h-[80vh] overflow-y-auto"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-display text-sm font-bold tracking-wider">H2H</h3>
+                  <button onClick={() => setH2hUserId(null)} className="h-8 w-8 rounded-full border border-border-default flex items-center justify-center text-text-muted">
+                    <X size={16} />
+                  </button>
+                </div>
+
+                {h2hLoading ? (
+                  <div className="flex justify-center py-12">
+                    <Loader2 className="animate-spin text-primary" size={28} />
+                  </div>
+                ) : h2hData ? (
+                  <>
+                    <div className="flex items-center gap-4 mb-4 rounded-xl border border-border-default bg-bg-primary p-4">
+                      <div className="flex-1 text-center">
+                        <div className="text-2xl mb-1">{h2hData.me.avatar}</div>
+                        <div className="text-xs font-semibold text-primary">Vos</div>
+                        <div className="font-display text-2xl font-bold text-primary">{h2hData.me.totalPoints}</div>
+                        <div className="text-[10px] text-text-muted">pts</div>
+                      </div>
+                      <div className="font-display text-lg text-text-muted">VS</div>
+                      <div className="flex-1 text-center">
+                        <div className="text-2xl mb-1">{h2hData.rival.avatar}</div>
+                        <div className="text-xs font-semibold">{h2hData.rival.name.split(" ")[0]}</div>
+                        <div className="font-display text-2xl font-bold">{h2hData.rival.totalPoints}</div>
+                        <div className="text-[10px] text-text-muted">pts</div>
+                      </div>
+                    </div>
+
+                    {h2hData.matches.length === 0 ? (
+                      <div className="text-center py-8 text-text-muted text-sm">
+                        Todavía no hay partidos finalizados con pronósticos de ambos.
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {h2hData.matches.map((m) => (
+                          <div key={m.matchId} className="rounded-lg border border-border-default bg-bg-surface p-2.5">
+                            <div className="flex items-center gap-1.5 mb-1.5 text-[11px] font-display font-bold">
+                              <span>{m.teamAFlag}</span>
+                              <span>{m.teamACode}</span>
+                              {m.scoreA !== null && (
+                                <span className="text-text-muted font-normal">{m.scoreA}-{m.scoreB}</span>
+                              )}
+                              <span>{m.teamBCode}</span>
+                              <span>{m.teamBFlag}</span>
+                            </div>
+                            <div className="flex items-center gap-2 text-[11px]">
+                              <div className={`flex-1 text-center rounded-lg py-1 border ${
+                                m.myPrediction
+                                  ? m.myPrediction.points > 0
+                                    ? "border-primary/30 bg-primary/5 text-primary"
+                                    : "border-border-default bg-bg-primary text-text-secondary"
+                                  : "border-dashed border-border-default text-text-muted"
+                              }`}>
+                                {m.myPrediction ? (
+                                  <><span className="font-display font-bold">{m.myPrediction.scoreA}-{m.myPrediction.scoreB}</span>{" "}<span className="text-[9px] text-text-muted">+{m.myPrediction.points}</span></>
+                                ) : "—"}
+                              </div>
+                              <span className="text-[10px] text-text-muted shrink-0">vs</span>
+                              <div className={`flex-1 text-center rounded-lg py-1 border ${
+                                m.rivalPrediction
+                                  ? m.rivalPrediction.points > 0
+                                    ? "border-secondary/30 bg-secondary/5 text-secondary"
+                                    : "border-border-default bg-bg-primary text-text-secondary"
+                                  : "border-dashed border-border-default text-text-muted"
+                              }`}>
+                                {m.rivalPrediction ? (
+                                  <><span className="font-display font-bold">{m.rivalPrediction.scoreA}-{m.rivalPrediction.scoreB}</span>{" "}<span className="text-[9px] text-text-muted">+{m.rivalPrediction.points}</span></>
+                                ) : "—"}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                ) : null}
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Leave group */}
         {detail?.ranking.find((r) => r.userId === dbUser?.id)?.role !== "ADMIN" && (

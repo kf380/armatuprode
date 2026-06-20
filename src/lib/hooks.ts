@@ -333,6 +333,15 @@ export function useDashboard() {
       setData(payload);
       setError(null);
       writeDashboardCache(userId, payload);
+      // Warm the ranking localStorage cache in background so the Ranking tab
+      // renders instantly when the user navigates there without a spinner.
+      if (!readRankingLocalCache("all")) {
+        authFetch("/api/ranking").then(async (r) => {
+          if (!r.ok) return;
+          const d = await r.json();
+          writeRankingLocalCache("all", { ranking: d.ranking || [], userPosition: d.userPosition || null, totalPlayers: d.totalPlayers || 0 });
+        }).catch(() => {});
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
     } finally {
@@ -429,15 +438,48 @@ export function useGroups() {
   return { groups, loading, error, refetch: fetchGroups };
 }
 
+const GROUP_DETAIL_LS_PREFIX = "ap_gd_v1:";
+const GROUP_DETAIL_LS_TTL = 30 * 60 * 1000; // 30min
+
+function readGroupDetailLocalCache(groupId: string, date: string | null): GroupDetail | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(`${GROUP_DETAIL_LS_PREFIX}${groupId}:${date ?? "total"}`);
+    if (!raw) return null;
+    const { ts, data }: { ts: number; data: GroupDetail } = JSON.parse(raw);
+    if (Date.now() - ts > GROUP_DETAIL_LS_TTL) return null;
+    return data;
+  } catch { return null; }
+}
+
+function writeGroupDetailLocalCache(groupId: string, date: string | null, data: GroupDetail): void {
+  if (typeof window === "undefined") return;
+  try {
+    // Historical date rankings are immutable once scored — long TTL
+    const ttl = date ? 24 * 60 * 60 * 1000 : GROUP_DETAIL_LS_TTL;
+    const key = `${GROUP_DETAIL_LS_PREFIX}${groupId}:${date ?? "total"}`;
+    // Evict old group cache entries to avoid localStorage bloat (keep last 10 groups)
+    const allKeys = Object.keys(window.localStorage).filter((k) => k.startsWith(GROUP_DETAIL_LS_PREFIX));
+    if (allKeys.length > 10) {
+      const oldest = allKeys.sort()[0];
+      window.localStorage.removeItem(oldest);
+    }
+    if (Date.now() - 0 < Date.now() + ttl) {
+      window.localStorage.setItem(key, JSON.stringify({ ts: Date.now(), data }));
+    }
+  } catch { /* quota */ }
+}
+
 export function useGroupDetail(id: string | null, date?: string | null) {
   const { authFetch } = useApp();
-  const [detail, setDetail] = useState<GroupDetail | null>(null);
-  const [loading, setLoading] = useState(false);
+  const cached = id ? readGroupDetailLocalCache(id, date ?? null) : null;
+  const [detail, setDetail] = useState<GroupDetail | null>(cached);
+  const [loading, setLoading] = useState(!cached && !!id);
   const [error, setError] = useState<string | null>(null);
 
   const fetchDetail = useCallback(async (groupId: string, filterDate?: string | null) => {
     try {
-      setLoading(true);
+      setDetail((prev) => { if (!prev) setLoading(true); return prev; });
       const url = filterDate
         ? `/api/groups/${groupId}?date=${encodeURIComponent(filterDate)}`
         : `/api/groups/${groupId}`;
@@ -446,6 +488,7 @@ export function useGroupDetail(id: string | null, date?: string | null) {
       const data: GroupDetail = await res.json();
       setDetail(data);
       setError(null);
+      writeGroupDetailLocalCache(groupId, filterDate ?? null, data);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
     } finally {
@@ -455,35 +498,65 @@ export function useGroupDetail(id: string | null, date?: string | null) {
 
   useEffect(() => {
     if (id) {
-      setDetail(null); // clear stale data before fetching new group to avoid flash
+      const c = readGroupDetailLocalCache(id, date ?? null);
+      setDetail(c ?? null);
+      setLoading(!c);
       fetchDetail(id, date ?? null);
     } else {
       setDetail(null);
+      setLoading(false);
     }
   }, [id, date, fetchDetail]);
 
   return { detail, loading, error, refetch: () => id && fetchDetail(id, date ?? null) };
 }
 
-export function useRanking() {
-  const { authFetch } = useApp();
-  const [ranking, setRanking] = useState<RankingEntry[]>([]);
-  const [userPosition, setUserPosition] = useState<RankingEntry | null>(null);
-  const [totalPlayers, setTotalPlayers] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const fetchedRef = useRef(false);
+const RANKING_CACHE_KEY = "ap_ranking_cache_v2";
+const RANKING_CACHE_TTL = 2 * 60 * 60 * 1000; // 2h
 
-  const fetchRanking = useCallback(async () => {
+type RankingCacheEntry = { ts: number; phase: string; data: { ranking: RankingEntry[]; userPosition: RankingEntry | null; totalPlayers: number } };
+
+function readRankingLocalCache(phase: string): RankingCacheEntry["data"] | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(RANKING_CACHE_KEY);
+    if (!raw) return null;
+    const entry: RankingCacheEntry = JSON.parse(raw);
+    if (Date.now() - entry.ts > RANKING_CACHE_TTL) return null;
+    if (entry.phase !== phase) return null;
+    return entry.data;
+  } catch { return null; }
+}
+
+function writeRankingLocalCache(phase: string, data: RankingCacheEntry["data"]): void {
+  if (typeof window === "undefined") return;
+  try { window.localStorage.setItem(RANKING_CACHE_KEY, JSON.stringify({ ts: Date.now(), phase, data })); } catch { /* quota */ }
+}
+
+export function useRanking(phase?: string | null) {
+  const { authFetch } = useApp();
+  const cachePhase = phase ?? "all";
+  const cached = readRankingLocalCache(cachePhase);
+  const [ranking, setRanking] = useState<RankingEntry[]>(cached?.ranking ?? []);
+  const [userPosition, setUserPosition] = useState<RankingEntry | null>(cached?.userPosition ?? null);
+  const [totalPlayers, setTotalPlayers] = useState(cached?.totalPlayers ?? 0);
+  const [loading, setLoading] = useState(!cached);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchRanking = useCallback(async (p?: string | null) => {
+    const key = p ?? "all";
     try {
-      setLoading(true);
-      const res = await authFetch("/api/ranking");
+      // Only show spinner if we have no data for this phase yet
+      setRanking((prev) => { if (prev.length === 0) setLoading(true); return prev; });
+      const url = p ? `/api/ranking?phase=${encodeURIComponent(p)}` : "/api/ranking";
+      const res = await authFetch(url);
       if (!res.ok) throw new Error("Failed to fetch ranking");
       const data = await res.json();
       setRanking(data.ranking || []);
       setUserPosition(data.userPosition || null);
       setTotalPlayers(data.totalPlayers || 0);
       setError(null);
+      writeRankingLocalCache(key, { ranking: data.ranking || [], userPosition: data.userPosition || null, totalPlayers: data.totalPlayers || 0 });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
     } finally {
@@ -492,13 +565,16 @@ export function useRanking() {
   }, [authFetch]);
 
   useEffect(() => {
-    if (!fetchedRef.current) {
-      fetchedRef.current = true;
-      fetchRanking();
-    }
-  }, [fetchRanking]);
+    // Reset to cached data (or empty) when phase changes, then background-fetch
+    const c = readRankingLocalCache(phase ?? "all");
+    setRanking(c?.ranking ?? []);
+    setUserPosition(c?.userPosition ?? null);
+    setTotalPlayers(c?.totalPlayers ?? 0);
+    setLoading(!c);
+    fetchRanking(phase);
+  }, [phase, fetchRanking]);
 
-  return { ranking, userPosition, totalPlayers, loading, error, refetch: fetchRanking };
+  return { ranking, userPosition, totalPlayers, loading, error, refetch: () => fetchRanking(phase) };
 }
 
 export function useUserStats() {
@@ -710,6 +786,9 @@ export function useLiveMatches(pollInterval = 30000) {
   const { authFetch } = useApp();
   const [matches, setMatches] = useState<LiveMatch[]>([]);
   const [loading, setLoading] = useState(true);
+  // Tracks whether at least one successful fetch has completed so callers
+  // can tell "empty because not yet fetched" from "empty because no live matches".
+  const [fetched, setFetched] = useState(false);
 
   const fetchLive = useCallback(async () => {
     try {
@@ -717,8 +796,9 @@ export function useLiveMatches(pollInterval = 30000) {
       if (!res.ok) throw new Error("Failed");
       const data = await res.json();
       setMatches(data.matches || []);
+      setFetched(true);
     } catch {
-      // Keep current state
+      // Keep current state; leave fetched as-is
     } finally {
       setLoading(false);
     }
@@ -730,7 +810,7 @@ export function useLiveMatches(pollInterval = 30000) {
     return () => clearInterval(interval);
   }, [fetchLive, pollInterval]);
 
-  return { matches, loading, refetch: fetchLive };
+  return { matches, loading, fetched, refetch: fetchLive };
 }
 
 // --- Chat types ---
@@ -1423,6 +1503,67 @@ export function usePoolTracking(groupId: string | null) {
     refetch: () => groupId && fetchTracking(groupId),
     setPaid,
   };
+}
+
+// --- Tournament Picks ---
+
+export interface TournamentPicksData {
+  pick: { champion: string | null; topScorer: string | null } | null;
+  championTally: Array<{ code: string; count: number }>;
+}
+
+export function useTournamentPicks() {
+  const { authFetch } = useApp();
+  const [data, setData] = useState<TournamentPicksData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const fetchedRef = useRef(false);
+
+  const fetchPicks = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await authFetch("/api/tournament-picks");
+      if (!res.ok) throw new Error("Failed");
+      setData(await res.json());
+    } catch {
+      // Keep current state
+    } finally {
+      setLoading(false);
+    }
+  }, [authFetch]);
+
+  useEffect(() => {
+    if (!fetchedRef.current) {
+      fetchedRef.current = true;
+      fetchPicks();
+    }
+  }, [fetchPicks]);
+
+  const savePick = useCallback(
+    async (patch: { champion?: string | null; topScorer?: string | null }) => {
+      setSaving(true);
+      try {
+        const res = await authFetch("/api/tournament-picks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patch),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          setData((prev) =>
+            prev
+              ? { ...prev, pick: json.pick }
+              : { pick: json.pick, championTally: [] },
+          );
+        }
+      } finally {
+        setSaving(false);
+      }
+    },
+    [authFetch],
+  );
+
+  return { data, loading, saving, refetch: fetchPicks, savePick };
 }
 
 export function useResumeGroupPayment() {
