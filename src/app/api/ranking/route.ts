@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { TournamentPhase } from "@prisma/client";
 import { getAuthUser } from "@/lib/supabase-server";
 import { readRankingCache, writeRankingCache } from "@/lib/dashboard-cache";
 
+const VALID_PHASES = new Set<string>(Object.values(TournamentPhase));
+
 export async function GET(request: NextRequest) {
+  try {
   const { user } = await getAuthUser(request);
 
   if (!user) {
@@ -12,7 +16,10 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const tournamentIdParam = searchParams.get("tournamentId");
-  const phaseParam = searchParams.get("phase"); // optional phase filter
+  const rawPhase = searchParams.get("phase");
+  // Validate phase against the enum — invalid values fall back to "all phases".
+  const phaseParam: TournamentPhase | null =
+    rawPhase && VALID_PHASES.has(rawPhase) ? (rawPhase as TournamentPhase) : null;
 
   // Parallelize: user lookup + tournament lookup don't depend on each other.
   const [dbUser, tournament] = await Promise.all([
@@ -32,7 +39,7 @@ export async function GET(request: NextRequest) {
   if (cached) return NextResponse.json(cached);
 
   const matchWhere = phaseParam
-    ? { tournamentId: tournament.id, phase: phaseParam as never }
+    ? { tournamentId: tournament.id, phase: phaseParam }
     : { tournamentId: tournament.id };
 
   // Parallelize: top-100 aggregation + total distinct players count.
@@ -130,4 +137,8 @@ export async function GET(request: NextRequest) {
   await writeRankingCache(tournament.id, cacheKey, payload);
 
   return NextResponse.json(payload);
+  } catch (e) {
+    console.error("ranking_route_error", e);
+    return NextResponse.json({ error: "Error interno" }, { status: 500 });
+  }
 }
