@@ -44,6 +44,8 @@ const limiters = {
   usersWrite: makeLimiter("userwrite", 5, 60),    // 5 signups/min per identity
   // Per-IP for unauthenticated or shared paths.
   webhookByIp: makeLimiter("mpwebhook", 120, 60), // 120 req/min per IP
+  inviteLookup: makeLimiter("invite-lookup", 20, 60), // 20 lookups/min per IP (enumeration guard)
+  vitals: makeLimiter("vitals", 30, 60),          // 30 req/min per IP
   // Per-key for admin endpoints.
   adminByKey: makeLimiter("admin", 60, 60),       // 60 req/min per admin key
 };

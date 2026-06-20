@@ -1,16 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { flags, canPlayersBeCharged } from "@/lib/flags";
+import { rateLimit, getClientIp } from "@/lib/ratelimit";
 
 // Public endpoint (no auth required) — returns basic group info by invite code
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ code: string }> }
 ) {
   const { code } = await params;
 
   if (!code) {
     return NextResponse.json({ error: "Codigo requerido" }, { status: 400 });
+  }
+
+  const rl = await rateLimit("inviteLookup", getClientIp(request));
+  if (!rl.ok) {
+    return NextResponse.json({ error: "Demasiadas búsquedas, esperá un momento" }, { status: 429 });
   }
 
   const group = await prisma.group.findUnique({

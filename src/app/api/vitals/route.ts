@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { log } from "@/lib/log";
+import { rateLimit, getClientIp } from "@/lib/ratelimit";
 
 /**
  * Receives Web Vitals samples from the client and logs them. Cheap: no DB
@@ -7,6 +8,9 @@ import { log } from "@/lib/log";
  * Vercel Analytics from here.
  */
 export async function POST(request: NextRequest) {
+  const rl = await rateLimit("vitals", getClientIp(request));
+  if (!rl.ok) return NextResponse.json({ ok: false }, { status: 429 });
+
   try {
     const body = await request.json().catch(() => null);
     if (!body || typeof body.name !== "string") {

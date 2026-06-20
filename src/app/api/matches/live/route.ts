@@ -39,77 +39,84 @@ export async function GET(request: NextRequest) {
       })
     : [];
 
-  // For each live match, get group rankings
-  const matchesWithRanking = await Promise.all(
-    liveMatches.map(async (match) => {
-      const userGroups = memberships.filter(
-        (m) => m.group.tournamentId === match.tournamentId,
-      );
+  // Batch-fetch all group members and match predictions — avoids N×M DB queries.
+  // Without this: (live_matches × user_groups × 2) round-trips. With this: 2.
+  const liveMatchIds = liveMatches.map((m) => m.id);
+  const allGroupIds = [...new Set(memberships.map((m) => m.groupId))];
 
-      const groupRankings = await Promise.all(
-        userGroups.map(async (mg) => {
-          const members = await prisma.groupMember.findMany({
-            where: { groupId: mg.groupId },
-            include: { user: true },
-          });
-
-          const memberPredictions = await prisma.prediction.findMany({
-            where: {
-              matchId: match.id,
-              userId: { in: members.map((m) => m.userId) },
-            },
-          });
-
-          const predictionMap = Object.fromEntries(
-            memberPredictions.map((p) => [p.userId, p]),
-          );
-
-          const ranking = members
-            .map((m) => {
-              const pred = predictionMap[m.userId];
-              return {
-                userId: m.userId,
-                name: m.user.name,
-                avatar: m.user.avatar,
-                prediction: pred
-                  ? `${pred.scoreA}-${pred.scoreB}`
-                  : null,
-                isUser: m.userId === dbUser?.id,
-              };
-            })
-            .filter((r) => r.prediction !== null);
-
-          return {
-            groupId: mg.groupId,
-            groupName: mg.group.name,
-            groupEmoji: mg.group.emoji,
-            ranking,
-          };
+  const [allGroupMembers, allMatchPredictions] = allGroupIds.length > 0
+    ? await Promise.all([
+        prisma.groupMember.findMany({
+          where: { groupId: { in: allGroupIds } },
+          include: { user: { select: { id: true, name: true, avatar: true } } },
         }),
-      );
+        prisma.prediction.findMany({
+          where: { matchId: { in: liveMatchIds } },
+          select: { userId: true, matchId: true, scoreA: true, scoreB: true },
+        }),
+      ])
+    : [[], []];
+
+  // Index members by groupId, predictions by matchId+userId
+  const membersByGroup: Record<string, typeof allGroupMembers> = {};
+  for (const m of allGroupMembers) {
+    (membersByGroup[m.groupId] ??= []).push(m);
+  }
+  const predByMatchUser: Record<string, Record<string, typeof allMatchPredictions[0]>> = {};
+  for (const p of allMatchPredictions) {
+    ((predByMatchUser[p.matchId] ??= {})[p.userId] = p);
+  }
+
+  const matchesWithRanking = liveMatches.map((match) => {
+    const userGroups = memberships.filter(
+      (m) => m.group.tournamentId === match.tournamentId,
+    );
+
+    const groupRankings = userGroups.map((mg) => {
+      const members = membersByGroup[mg.groupId] ?? [];
+      const matchPreds = predByMatchUser[match.id] ?? {};
+
+      const ranking = members
+        .map((m) => ({
+          userId: m.userId,
+          name: m.user.name,
+          avatar: m.user.avatar,
+          prediction: matchPreds[m.userId]
+            ? `${matchPreds[m.userId].scoreA}-${matchPreds[m.userId].scoreB}`
+            : null,
+          isUser: m.userId === dbUser?.id,
+        }))
+        .filter((r) => r.prediction !== null);
 
       return {
-        id: match.id,
-        teamACode: match.teamACode,
-        teamAName: match.teamAName,
-        teamAFlag: match.teamAFlag,
-        teamBCode: match.teamBCode,
-        teamBName: match.teamBName,
-        teamBFlag: match.teamBFlag,
-        matchDate: match.matchDate,
-        scoreA: match.scoreA,
-        scoreB: match.scoreB,
-        minute: match.minute,
-        period: match.period,
-        matchGroup: match.matchGroup,
-        phase: match.phase,
-        userPrediction: predMap[match.id]
-          ? { scoreA: predMap[match.id].scoreA, scoreB: predMap[match.id].scoreB }
-          : null,
-        groupRankings,
+        groupId: mg.groupId,
+        groupName: mg.group.name,
+        groupEmoji: mg.group.emoji,
+        ranking,
       };
-    }),
-  );
+    });
+
+    return {
+      id: match.id,
+      teamACode: match.teamACode,
+      teamAName: match.teamAName,
+      teamAFlag: match.teamAFlag,
+      teamBCode: match.teamBCode,
+      teamBName: match.teamBName,
+      teamBFlag: match.teamBFlag,
+      matchDate: match.matchDate,
+      scoreA: match.scoreA,
+      scoreB: match.scoreB,
+      minute: match.minute,
+      period: match.period,
+      matchGroup: match.matchGroup,
+      phase: match.phase,
+      userPrediction: predMap[match.id]
+        ? { scoreA: predMap[match.id].scoreA, scoreB: predMap[match.id].scoreB }
+        : null,
+      groupRankings,
+    };
+  });
 
   return NextResponse.json({ matches: matchesWithRanking });
 }

@@ -80,20 +80,20 @@ export default function ProfileScreen() {
       level,
       levelName,
       xpNext,
-      points: stats?.points ?? mockUser.points,
-      globalRank: stats?.globalRank ?? mockUser.globalRank,
-      streak: stats?.streak ?? mockUser.streak,
-      precision: stats?.precision ?? mockUser.precision,
-      exactos: stats?.exactos ?? mockUser.exactos,
-      predictions: stats?.predictions ?? mockUser.predictions,
+      points: stats?.points ?? 0,
+      globalRank: stats?.globalRank ?? null,
+      streak: stats?.streak ?? 0,
+      precision: stats?.precision ?? null,
+      exactos: stats?.exactos ?? 0,
+      predictions: stats?.predictions ?? 0,
     };
   }, [dbUser, stats]);
 
-  const badges = apiBadges.length > 0 ? apiBadges : mockBadges;
+  const badges = apiBadges;
   const earnedCount = badges.filter((b) => b.earned).length;
 
   return (
-    <motion.div className="space-y-6 pb-6" variants={stagger} initial="hidden" animate="show">
+    <div className="space-y-6 pb-6">
       {/* Header */}
       <motion.div variants={fadeUp} className="flex items-center justify-between pt-2">
         <h1 className="font-display text-xl font-bold tracking-widest">MI PERFIL</h1>
@@ -144,7 +144,7 @@ export default function ProfileScreen() {
           <div className="text-[10px] font-display tracking-widest text-text-muted">RACHA</div>
         </div>
         <div className="rounded-xl border border-border-default bg-bg-surface p-3.5 text-center">
-          <div className="font-display text-2xl font-bold text-text-primary">{user.precision}%</div>
+          <div className="font-display text-2xl font-bold text-text-primary">{user.precision != null ? `${user.precision}%` : "—"}</div>
           <div className="text-[10px] font-display tracking-widest text-text-muted">PRECISION</div>
         </div>
       </motion.div>
@@ -323,7 +323,7 @@ export default function ProfileScreen() {
       </motion.div>
 
       {/* Legal footer */}
-      <motion.div variants={fadeUp} className="flex items-center justify-center gap-3 pt-2 pb-4">
+      <div className="flex items-center justify-center gap-3 pt-2 pb-4">
         <a href="/terms" className="text-[11px] text-text-muted hover:text-primary transition-colors">
           Terminos y condiciones
         </a>
@@ -331,7 +331,7 @@ export default function ProfileScreen() {
         <a href="/privacy" className="text-[11px] text-text-muted hover:text-primary transition-colors">
           Politica de privacidad
         </a>
-      </motion.div>
-    </motion.div>
+      </div>
+    </div>
   );
 }

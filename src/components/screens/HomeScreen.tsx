@@ -1044,7 +1044,10 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
                 </div>
                 <div className="mt-3 pt-3 border-t border-border-default flex items-center justify-between">
                   <span className="text-xs text-text-muted">
-                    Tu prediccion: <span className="font-mono font-bold text-text-secondary">{match.userPrediction?.scoreA}-{match.userPrediction?.scoreB}</span>
+                    Tu prediccion:{" "}
+                    <span className="font-mono font-bold text-text-secondary">
+                      {match.userPrediction ? `${match.userPrediction.scoreA}-${match.userPrediction.scoreB}` : "—"}
+                    </span>
                   </span>
                   {match.pointsEarned !== undefined && (
                     <span

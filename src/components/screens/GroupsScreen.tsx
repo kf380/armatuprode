@@ -44,7 +44,7 @@ export default function GroupsScreen() {
   const realMoneyEnabled = config.flags.enableRealMoneyPools;
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
   const [rankingDate, setRankingDate] = useState<string | null>(null);
-  const { detail, loading: detailLoading } = useGroupDetail(selectedGroup, rankingDate);
+  const { detail, loading: detailLoading, error: detailError } = useGroupDetail(selectedGroup, rankingDate);
 
   type UpcomingMatchResp = {
     match: { id: string; teamAName: string; teamBName: string; teamAFlag: string; teamBFlag: string; teamACode: string; teamBCode: string; matchDate: string } | null;
@@ -279,6 +279,29 @@ export default function GroupsScreen() {
 
   // Group detail view
   if (selectedGroup) {
+    if (detailError && !detail) {
+      return (
+        <div>
+          <button
+            onClick={() => setSelectedGroup(null)}
+            className="flex items-center gap-1 text-sm text-text-secondary mb-4 pt-2"
+          >
+            <ChevronLeft size={16} /> Grupos
+          </button>
+          <div className="rounded-2xl border border-danger/30 bg-danger/5 p-6 text-center">
+            <div className="text-3xl mb-3">⚠️</div>
+            <div className="font-display text-sm font-bold tracking-wider text-danger mb-2">ERROR AL CARGAR</div>
+            <div className="text-xs text-text-muted mb-4">No se pudo cargar el grupo. Revisá tu conexión.</div>
+            <button
+              onClick={() => setSelectedGroup(selectedGroup)}
+              className="rounded-xl border border-danger/40 bg-danger/10 px-4 py-2 text-xs text-danger font-bold"
+            >
+              Reintentar
+            </button>
+          </div>
+        </div>
+      );
+    }
     if (detailLoading || !detail) {
       return (
         <div>
@@ -1050,6 +1073,30 @@ export default function GroupsScreen() {
           label="INVITAR AMIGOS"
           variant="primary"
         />
+
+        {/* Leave group */}
+        {detail?.ranking.find((r) => r.userId === dbUser?.id)?.role !== "ADMIN" && (
+          <button
+            onClick={async () => {
+              if (!window.confirm("¿Seguro que querés salir del grupo?")) return;
+              try {
+                const res = await authFetch(`/api/groups/${selectedGroup}/leave`, { method: "DELETE" });
+                if (res.ok) {
+                  setSelectedGroup(null);
+                  refetchGroups();
+                } else {
+                  const data = await res.json().catch(() => ({}));
+                  setBannerError(data.error || "No se pudo salir del grupo");
+                }
+              } catch {
+                setBannerError("Error de conexión");
+              }
+            }}
+            className="w-full rounded-xl border border-danger/20 bg-transparent py-2.5 text-xs text-danger/70 hover:bg-danger/5 hover:text-danger transition-all"
+          >
+            Salir del grupo
+          </button>
+        )}
       </motion.div>
     );
   }
@@ -1083,31 +1130,47 @@ export default function GroupsScreen() {
         </button>
       </div>
 
-      <div className="space-y-3 md:grid md:grid-cols-2 md:gap-4 md:space-y-0">
-        {displayGroups.map((group) => (
+      {displayGroups.length === 0 ? (
+        <div className="rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/10 to-bg-surface p-8 text-center">
+          <div className="text-4xl mb-3">🏆</div>
+          <div className="font-display text-sm font-bold tracking-wider mb-2">JUNTÁ TU GENTE</div>
+          <div className="text-xs text-text-secondary leading-relaxed max-w-xs mx-auto mb-5">
+            Creá tu prode en 30 segundos y pasale el link a tu grupo de WhatsApp.
+          </div>
           <button
-            key={group.id}
-            onClick={() => setSelectedGroup(group.id)}
-            className="w-full rounded-xl border border-border-default bg-bg-surface p-4 text-left transition-all hover:border-primary/20 hover:bg-bg-surface-hover active:scale-[0.99]"
+            onClick={() => router.push("/organizer/create")}
+            className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 font-display text-xs font-bold tracking-widest text-bg-primary"
           >
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">{group.emoji}</span>
-              <div className="flex-1">
-                <div className="font-semibold">{group.name}</div>
-                <div className="text-xs text-text-muted">
-                  {group.members} miembros • {group.tournament}
+            <Plus size={14} /> CREAR MI PRODE
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-3 md:grid md:grid-cols-2 md:gap-4 md:space-y-0">
+          {displayGroups.map((group) => (
+            <button
+              key={group.id}
+              onClick={() => setSelectedGroup(group.id)}
+              className="w-full rounded-xl border border-border-default bg-bg-surface p-4 text-left transition-all hover:border-primary/20 hover:bg-bg-surface-hover active:scale-[0.99]"
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">{group.emoji}</span>
+                <div className="flex-1">
+                  <div className="font-semibold">{group.name}</div>
+                  <div className="text-xs text-text-muted">
+                    {group.members} miembros • {group.tournament}
+                  </div>
                 </div>
               </div>
-            </div>
-            {group.hasPool && realMoneyEnabled && (
-              <div className="mt-2 flex items-center gap-1.5 text-xs text-accent">
-                <BarChart3 size={12} />
-                Pozo: ${group.poolAmount.toLocaleString()} {group.currency}
-              </div>
-            )}
-          </button>
-        ))}
-      </div>
+              {group.hasPool && realMoneyEnabled && (
+                <div className="mt-2 flex items-center gap-1.5 text-xs text-accent">
+                  <BarChart3 size={12} />
+                  Pozo: ${group.poolAmount.toLocaleString()} {group.currency}
+                </div>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Create Group Modal */}
       <AnimatePresence>

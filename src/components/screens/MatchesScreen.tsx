@@ -782,7 +782,7 @@ export default function MatchesScreen() {
                 </div>
                 <div className="mt-2 flex items-center justify-between border-t border-border-default pt-2">
                   <div className="text-xs text-text-muted">
-                    <div>Tu prediccion: {match.userPrediction?.scoreA}-{match.userPrediction?.scoreB}</div>
+                    <div>Tu prediccion: {match.userPrediction ? `${match.userPrediction.scoreA}-${match.userPrediction.scoreB}` : "—"}</div>
                     {match.qualifiedTeam && (
                       <div className="mt-0.5">Clasifico: <strong>{match.qualifiedTeam}</strong></div>
                     )}
