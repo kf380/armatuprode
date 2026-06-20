@@ -9,7 +9,7 @@ import { calculatePoints } from "@/lib/scoring";
 
 export default function LiveMatchScreen() {
   const { setScreen, liveMatchId } = useApp();
-  const { matches, loading } = useLiveMatches(30000);
+  const { matches, loading } = useLiveMatches();
   const [selectedGroupIdx, setSelectedGroupIdx] = useState(0);
   const [goalFlash, setGoalFlash] = useState(false);
   const prevScoreRef = useRef<string | null>(null);

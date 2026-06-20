@@ -57,9 +57,7 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
   // Single round-trip: stats + matches + groups + liveMatches + badges agregados.
   // Reemplaza 5 fetches concurrentes anteriores que tardaban en frío.
   const { data: dash, loading: dashLoading, refetch: refetchDash } = useDashboard();
-  // Live polling cada 90s para el banner LIVE. Se mantiene separado del dashboard
-  // porque tiene cadencia propia más agresiva.
-  const { matches: livePolled, fetched: liveFetched, refetch: refetchLive } = useLiveMatches(90000);
+  const { matches: livePolled, fetched: liveFetched, refetch: refetchLive } = useLiveMatches();
 
   // Helper para mapear dashboard.matches (raw API shape) al ScreenMatch que
   // espera el resto del componente (lowercase status + formatted time).
