@@ -481,12 +481,7 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
         </motion.div>
       )}
     </AnimatePresence>
-    <motion.div
-      className="relative space-y-6 pb-6"
-      variants={stagger}
-      initial="hidden"
-      animate="show"
-    >
+    <div className="relative space-y-6 pb-6">
       {/* Cancha sutil — líneas de campo como bg tenuísimo */}
       <svg
         className="pointer-events-none absolute inset-x-0 top-0 mx-auto h-[420px] w-full max-w-2xl opacity-[0.05]"
@@ -1069,7 +1064,7 @@ export default function HomeScreen({ onNavigate }: { onNavigate: (tab: string, d
             ))}
         </div>
       </motion.div>
-    </motion.div>
+    </div>
     </PullToRefresh>
   );
 }

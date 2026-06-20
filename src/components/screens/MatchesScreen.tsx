@@ -337,7 +337,7 @@ export default function MatchesScreen() {
   }
 
   return (
-    <motion.div className="space-y-5 pb-6" variants={stagger} initial="hidden" animate="show">
+    <div className="space-y-5 pb-6">
       {/* Header */}
       <motion.div variants={fadeUp} className="pt-2">
         <h1 className="font-display text-xl font-bold tracking-widest">PARTIDOS</h1>
@@ -1000,6 +1000,6 @@ export default function MatchesScreen() {
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.div>
+    </div>
   );
 }

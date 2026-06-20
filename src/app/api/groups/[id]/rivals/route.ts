@@ -16,17 +16,21 @@ export async function GET(
 ) {
   const { user } = await getAuthUser(request);
   if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-  const dbUser = await prisma.user.findUnique({ where: { authId: user.id } });
-  if (!dbUser) return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
 
   const { id: groupId } = await params;
-  const group = await prisma.group.findUnique({
-    where: { id: groupId },
-    select: {
-      tournamentId: true,
-      members: { select: { userId: true, user: { select: { id: true, name: true, avatar: true } } } },
-    },
-  });
+
+  const [dbUser, group] = await Promise.all([
+    prisma.user.findUnique({ where: { authId: user.id } }),
+    prisma.group.findUnique({
+      where: { id: groupId },
+      select: {
+        tournamentId: true,
+        members: { select: { userId: true, user: { select: { id: true, name: true, avatar: true } } } },
+      },
+    }),
+  ]);
+
+  if (!dbUser) return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
   if (!group) return NextResponse.json({ error: "Grupo no encontrado" }, { status: 404 });
   if (!group.members.some((m) => m.userId === dbUser.id)) {
     return NextResponse.json({ error: "No sos miembro" }, { status: 403 });

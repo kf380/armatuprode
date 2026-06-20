@@ -9,20 +9,20 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  const dbUser = await prisma.user.findUnique({
-    where: { authId: user.id },
-  });
+  const { searchParams } = new URL(request.url);
+  const tournamentIdParam = searchParams.get("tournamentId");
+
+  // Wave 1: user + tournament in parallel.
+  const [dbUser, tournament] = await Promise.all([
+    prisma.user.findUnique({ where: { authId: user.id } }),
+    tournamentIdParam
+      ? prisma.tournament.findUnique({ where: { id: tournamentIdParam } })
+      : prisma.tournament.findFirst({ where: { active: true } }),
+  ]);
 
   if (!dbUser) {
     return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
   }
-
-  const { searchParams } = new URL(request.url);
-  const tournamentIdParam = searchParams.get("tournamentId");
-
-  const tournament = tournamentIdParam
-    ? await prisma.tournament.findUnique({ where: { id: tournamentIdParam } })
-    : await prisma.tournament.findFirst({ where: { active: true } });
 
   if (!tournament) {
     return NextResponse.json({
@@ -30,16 +30,37 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  const predictions = await prisma.prediction.findMany({
-    where: { userId: dbUser.id, match: { tournamentId: tournament.id } },
-    select: {
-      scoreA: true,
-      scoreB: true,
-      points: true,
-      match: { select: { status: true, scoreA: true, scoreB: true } },
-    },
-    orderBy: { match: { matchDate: "desc" } },
-  });
+  // Wave 2: predictions + ranking aggregation in parallel.
+  const [predictions, above] = await Promise.all([
+    prisma.prediction.findMany({
+      where: { userId: dbUser.id, match: { tournamentId: tournament.id } },
+      select: {
+        scoreA: true,
+        scoreB: true,
+        points: true,
+        match: { select: { status: true, scoreA: true, scoreB: true } },
+      },
+      orderBy: { match: { matchDate: "desc" } },
+    }),
+    // Ranking query runs in parallel while predictions are fetched — we'll use
+    // totalPoints computed from predictions below to filter, but since we don't
+    // know totalPoints yet we compute it from a subquery instead.
+    prisma.$queryRaw<[{ rank: bigint }]>`
+      SELECT COUNT(DISTINCT u2.id)::bigint AS rank
+      FROM "User" u2
+      JOIN "Prediction" p2 ON p2."userId" = u2.id
+      JOIN "Match" m2 ON p2."matchId" = m2.id
+      WHERE m2."tournamentId" = ${tournament.id}
+        AND u2.id != ${dbUser.id}
+      GROUP BY u2.id
+      HAVING SUM(p2.points) > (
+        SELECT COALESCE(SUM(p."points"), 0)
+        FROM "Prediction" p
+        JOIN "Match" m ON p."matchId" = m.id
+        WHERE p."userId" = ${dbUser.id} AND m."tournamentId" = ${tournament.id}
+      )
+    `,
+  ]);
 
   const totalPredictions = predictions.length;
   const totalPoints = predictions.reduce((sum, p) => sum + p.points, 0);
@@ -58,14 +79,6 @@ export async function GET(request: NextRequest) {
     else break;
   }
 
-  const above = await prisma.$queryRaw<[{ count: bigint }]>`
-    SELECT COUNT(DISTINCT p."userId")::bigint AS count
-    FROM "Prediction" p
-    JOIN "Match" m ON p."matchId" = m.id
-    WHERE m."tournamentId" = ${tournament.id}
-    GROUP BY p."userId"
-    HAVING SUM(p.points) > ${totalPoints}
-  `;
   const globalRank = Number(above.length) + 1;
 
   return NextResponse.json({
