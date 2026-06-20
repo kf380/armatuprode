@@ -8,6 +8,7 @@ import { WalletLotSource } from "@prisma/client";
 import { log, logSettled } from "@/lib/log";
 import { rateLimit, hashSecret } from "@/lib/ratelimit";
 import { adminKeyFromRequest, isValidAdmin } from "@/lib/admin-auth";
+import { invalidateGroupDetailCache } from "@/lib/dashboard-cache";
 import { logAdminAction } from "@/lib/admin-audit";
 
 function isKnockout(phase: string): boolean {
@@ -357,14 +358,15 @@ export async function POST(
   tailPromises.push(notifyMatchResults(id, scoreA, scoreB, match.teamAName, match.teamBName));
   tailPromises.push(notifyRankingChanges(id, match.tournamentId));
 
-  // Chat system events: notify all groups for this tournament
+  // Chat system events + group detail cache invalidation for all groups in tournament.
   tailPromises.push(
     (async () => {
       const groups = await prisma.group.findMany({ where: { tournamentId: match.tournamentId } });
       const text = `Partido terminado: ${match.teamAName} ${scoreA}-${scoreB} ${match.teamBName}`;
-      await Promise.allSettled(
-        groups.map((g) => createChatSystemEvent(g.id, text, "⚽")),
-      );
+      await Promise.allSettled([
+        ...groups.map((g) => createChatSystemEvent(g.id, text, "⚽")),
+        ...groups.map((g) => invalidateGroupDetailCache(g.id)),
+      ]);
     })(),
   );
 

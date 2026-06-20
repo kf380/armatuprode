@@ -104,3 +104,38 @@ export async function invalidateGroupsCache(userId: string): Promise<void> {
     await redis.del(`${GROUPS_PREFIX}${userId}`);
   } catch { /* swallow */ }
 }
+
+// ── Group detail cache ─────────────────────────────────────────────────────
+// Caches { ranking, availableDates } per group+date. Per-user fields
+// (myRole, permissions) are added fresh on every request since they're cheap.
+// TTL 30s; invalidated explicitly when a match finishes or member joins.
+const GROUP_DETAIL_PREFIX = "group-detail:v1:";
+const GROUP_DETAIL_TTL = 30;
+
+export async function readGroupDetailCache<T>(groupId: string, date: string | null): Promise<T | null> {
+  if (!redis) return null;
+  try {
+    return await redis.get<T>(`${GROUP_DETAIL_PREFIX}${groupId}:${date ?? "total"}`) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function writeGroupDetailCache<T>(groupId: string, date: string | null, data: T): Promise<void> {
+  if (!redis) return;
+  try {
+    await redis.set(`${GROUP_DETAIL_PREFIX}${groupId}:${date ?? "total"}`, data, { ex: GROUP_DETAIL_TTL });
+  } catch { /* swallow */ }
+}
+
+export async function invalidateGroupDetailCache(groupId: string): Promise<void> {
+  if (!redis) return;
+  try {
+    let cursor: string = "0";
+    do {
+      const [nextCursor, keys]: [string, string[]] = await redis.scan(cursor, { match: `${GROUP_DETAIL_PREFIX}${groupId}:*`, count: 100 });
+      cursor = nextCursor;
+      if (keys.length > 0) await redis.del(...keys);
+    } while (String(cursor) !== "0");
+  } catch { /* swallow */ }
+}

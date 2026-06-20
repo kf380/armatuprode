@@ -4,6 +4,7 @@ import { getAuthUser } from "@/lib/supabase-server";
 import { canEditGroup, canResumePayment, canViewBilling } from "@/lib/group-policy";
 import { log } from "@/lib/log";
 import { flags } from "@/lib/flags";
+import { readGroupDetailCache, writeGroupDetailCache } from "@/lib/dashboard-cache";
 import type { OrgMemberRole, PrizeType, MoneyMode } from "@prisma/client";
 
 const VALID_PRIZE_TYPES: PrizeType[] = ["NONE", "MANUAL_FIXED", "SPONSOR"];
@@ -21,28 +22,29 @@ export async function GET(
 
   const { id } = await params;
 
-  const group = await prisma.group.findUnique({
-    where: { id },
-    include: {
-      tournament: { select: { id: true, name: true, type: true } },
-      organization: { select: { id: true, name: true, logoUrl: true, slug: true } },
-      members: {
-        include: {
-          user: {
-            select: { id: true, name: true, avatar: true, country: true, xp: true },
+  // Wave 1: group + dbUser in parallel (both needed for membership check).
+  const [group, dbUser] = await Promise.all([
+    prisma.group.findUnique({
+      where: { id },
+      include: {
+        tournament: { select: { id: true, name: true, type: true } },
+        organization: { select: { id: true, name: true, logoUrl: true, slug: true } },
+        members: {
+          include: {
+            user: {
+              select: { id: true, name: true, avatar: true, country: true, xp: true },
+            },
           },
         },
+        _count: { select: { members: true } },
       },
-      _count: { select: { members: true } },
-    },
-  });
+    }),
+    prisma.user.findUnique({ where: { authId: user.id } }),
+  ]);
 
   if (!group) {
     return NextResponse.json({ error: "Grupo no encontrado" }, { status: 404 });
   }
-
-  // Verify user is a member of this group
-  const dbUser = await prisma.user.findUnique({ where: { authId: user.id } });
   if (!dbUser || !group.members.some((m) => m.userId === dbUser.id)) {
     return NextResponse.json({ error: "No sos miembro de este grupo" }, { status: 403 });
   }
@@ -50,7 +52,6 @@ export async function GET(
   const memberIds = group.members.map((m) => m.userId);
 
   // Optional ?date=YYYY-MM-DD filter (AR calendar day, UTC-3).
-  // When present, ranking sums only points from matches finished that day.
   const dateParam = request.nextUrl.searchParams.get("date");
   const AR_OFFSET_MS = 3 * 60 * 60 * 1000;
 
@@ -61,55 +62,65 @@ export async function GET(
     dayWindow = { gte: startUtc, lte: endUtc };
   }
 
-  const predictions = await prisma.prediction.findMany({
-    where: {
-      userId: { in: memberIds },
-      match: {
-        tournamentId: group.tournamentId,
-        ...(dayWindow ? { matchDate: dayWindow, status: "FINISHED" } : {}),
-      },
-    },
-    select: { userId: true, points: true },
-  });
+  // Wave 2: ranking+dates from cache if warm; org role always fresh (per-user).
+  type RankingCache = { ranking: typeof ranking; availableDates: string[] };
+  const cached = await readGroupDetailCache<RankingCache>(id, dateParam);
 
-  const pointsByUser: Record<string, number> = {};
-  for (const p of predictions) {
-    pointsByUser[p.userId] = (pointsByUser[p.userId] || 0) + p.points;
+  let ranking: { userId: string; name: string; avatar: string; country: string; points: number; role: string }[];
+  let availableDates: string[];
+
+  if (cached) {
+    ranking = cached.ranking;
+    availableDates = cached.availableDates;
+  } else {
+    const [predictions, dateRows] = await Promise.all([
+      prisma.prediction.findMany({
+        where: {
+          userId: { in: memberIds },
+          match: {
+            tournamentId: group.tournamentId,
+            ...(dayWindow ? { matchDate: dayWindow, status: "FINISHED" } : {}),
+          },
+        },
+        select: { userId: true, points: true },
+      }),
+      prisma.$queryRaw<{ date: string }[]>`
+        SELECT DISTINCT TO_CHAR(("matchDate" AT TIME ZONE 'UTC') - INTERVAL '3 hours', 'YYYY-MM-DD') AS date
+        FROM "Match"
+        WHERE "tournamentId" = ${group.tournamentId} AND "status" = 'FINISHED'
+        ORDER BY date ASC
+      `,
+    ]);
+
+    const pointsByUser: Record<string, number> = {};
+    for (const p of predictions) {
+      pointsByUser[p.userId] = (pointsByUser[p.userId] || 0) + p.points;
+    }
+
+    ranking = group.members
+      .map((m) => ({
+        userId: m.user.id,
+        name: m.user.name,
+        avatar: m.user.avatar,
+        country: m.user.country,
+        points: pointsByUser[m.userId] || 0,
+        role: m.role,
+      }))
+      .sort((a, b) => b.points - a.points);
+
+    availableDates = dateRows.map((r) => r.date);
+    void writeGroupDetailCache(id, dateParam, { ranking, availableDates });
   }
 
-  const ranking = group.members
-    .map((m) => ({
-      userId: m.user.id,
-      name: m.user.name,
-      avatar: m.user.avatar,
-      country: m.user.country,
-      points: pointsByUser[m.userId] || 0,
-      role: m.role,
-    }))
-    .sort((a, b) => b.points - a.points);
+  // org role is per-user, always fetched fresh (cheap single-row lookup).
+  const orgMember = group.organizationId
+    ? await prisma.organizationMember.findUnique({
+        where: { organizationId_userId: { organizationId: group.organizationId, userId: dbUser.id } },
+      })
+    : null;
 
-  // Available dates = days (AR tz) with at least one finished match in the tournament.
-  // Frontend uses this to render the date selector.
-  const finishedMatches = await prisma.match.findMany({
-    where: { tournamentId: group.tournamentId, status: "FINISHED" },
-    select: { matchDate: true },
-    orderBy: { matchDate: "asc" },
-  });
-  const datesSet = new Set<string>();
-  for (const m of finishedMatches) {
-    const arIso = new Date(m.matchDate.getTime() - AR_OFFSET_MS).toISOString().slice(0, 10);
-    datesSet.add(arIso);
-  }
-  const availableDates = Array.from(datesSet).sort();
-
-  // Resolve org role + member role + permissions for the requesting user.
-  let orgRole: OrgMemberRole | null = null;
-  if (group.organizationId) {
-    const orgM = await prisma.organizationMember.findUnique({
-      where: { organizationId_userId: { organizationId: group.organizationId, userId: dbUser.id } },
-    });
-    orgRole = orgM?.role ?? null;
-  }
+  // Resolve org role + permissions for the requesting user.
+  const orgRole: OrgMemberRole | null = orgMember?.role ?? null;
   const myMember = group.members.find((m) => m.userId === dbUser.id);
   const permissions = {
     canEdit: canEditGroup({ group, userId: dbUser.id, orgRole }).ok,
