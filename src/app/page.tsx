@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { startTransition, useEffect, useRef, useState } from "react";
 import { AppProvider, useApp } from "@/lib/store";
 import { savePendingJoinCode, readPendingJoinCode } from "@/lib/join-code";
 import TabBar from "@/components/TabBar";
@@ -140,7 +140,7 @@ function AppContent() {
   }, [authLoading, isLoggedIn, setActiveTab]);
 
   const handleNavigate = (tab: string) => {
-    setActiveTab(tab);
+    startTransition(() => setActiveTab(tab));
   };
 
   // Keep-alive: track visited tabs in a ref so the update is synchronous during
@@ -190,7 +190,7 @@ function AppContent() {
           ))}
         </main>
       )}
-      <TabBar active={activeTab} onChange={setActiveTab} />
+      <TabBar active={activeTab} onChange={(tab) => startTransition(() => setActiveTab(tab))} />
     </div>
   );
 }

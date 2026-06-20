@@ -324,7 +324,9 @@ export function useDashboard() {
 
   const fetchDashboard = useCallback(async () => {
     try {
-      setLoading(true);
+      // Only show spinner on cold start (no existing data). Background refreshes
+      // update silently so the list never disappears mid-session.
+      setData((prev) => { if (prev === null) setLoading(true); return prev; });
       const res = await authFetch("/api/users/dashboard");
       if (!res.ok) throw new Error("Failed");
       const payload: DashboardPayload = await res.json();
