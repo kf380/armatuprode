@@ -4,7 +4,11 @@ import { getAuthUser } from "@/lib/supabase-server";
 import { canEditGroup, canResumePayment, canViewBilling } from "@/lib/group-policy";
 import { log } from "@/lib/log";
 import { flags } from "@/lib/flags";
-import { readGroupDetailCache, writeGroupDetailCache } from "@/lib/dashboard-cache";
+import {
+  readGroupDetailCache, writeGroupDetailCache,
+  readGroupMembersCache, writeGroupMembersCache, invalidateGroupMembersCache,
+  type CachedMember,
+} from "@/lib/dashboard-cache";
 import type { OrgMemberRole, PrizeType, MoneyMode } from "@prisma/client";
 
 const VALID_PRIZE_TYPES: PrizeType[] = ["NONE", "MANUAL_FIXED", "SPONSOR"];
@@ -22,34 +26,52 @@ export async function GET(
 
   const { id } = await params;
 
-  // Wave 1: group + dbUser in parallel (both needed for membership check).
-  const [group, dbUser] = await Promise.all([
+  // Wave 1: always-light group query + dbUser + members cache — all in parallel.
+  // The group query never includes members here; members come from cache or a
+  // dedicated query below. This keeps wave 1 cheap on every request.
+  const [group, dbUser, cachedMembers] = await Promise.all([
     prisma.group.findUnique({
       where: { id },
       include: {
         tournament: { select: { id: true, name: true, type: true } },
         organization: { select: { id: true, name: true, logoUrl: true, slug: true } },
-        members: {
-          include: {
-            user: {
-              select: { id: true, name: true, avatar: true, country: true, xp: true },
-            },
-          },
-        },
         _count: { select: { members: true } },
       },
     }),
     prisma.user.findUnique({ where: { authId: user.id } }),
+    readGroupMembersCache(id),
   ]);
 
   if (!group) {
     return NextResponse.json({ error: "Grupo no encontrado" }, { status: 404 });
   }
-  if (!dbUser || !group.members.some((m) => m.userId === dbUser.id)) {
+
+  // Wave 1b: fetch members from DB only on cold start (cache miss).
+  let members: CachedMember[];
+  if (cachedMembers) {
+    members = cachedMembers;
+  } else {
+    const dbMembers = await prisma.groupMember.findMany({
+      where: { groupId: id },
+      include: { user: { select: { id: true, name: true, avatar: true, country: true, xp: true } } },
+    });
+    members = dbMembers.map((m) => ({
+      userId: m.userId,
+      name: m.user.name,
+      avatar: m.user.avatar,
+      country: m.user.country,
+      xp: m.user.xp,
+      role: m.role,
+      joinedAt: m.joinedAt.toISOString(),
+    }));
+    void writeGroupMembersCache(id, members);
+  }
+
+  if (!dbUser || !members.some((m) => m.userId === dbUser.id)) {
     return NextResponse.json({ error: "No sos miembro de este grupo" }, { status: 403 });
   }
 
-  const memberIds = group.members.map((m) => m.userId);
+  const memberIds = members.map((m) => m.userId);
 
   // Optional ?date=YYYY-MM-DD filter (AR calendar day, UTC-3).
   const dateParam = request.nextUrl.searchParams.get("date");
@@ -109,12 +131,12 @@ export async function GET(
       pointsByUser[r.userId] = r.points;
     }
 
-    ranking = group.members
+    ranking = members
       .map((m) => ({
-        userId: m.user.id,
-        name: m.user.name,
-        avatar: m.user.avatar,
-        country: m.user.country,
+        userId: m.userId,
+        name: m.name,
+        avatar: m.avatar,
+        country: m.country,
         points: pointsByUser[m.userId] ?? 0,
         role: m.role,
       }))
@@ -133,23 +155,12 @@ export async function GET(
 
   // Resolve org role + permissions for the requesting user.
   const orgRole: OrgMemberRole | null = orgMember?.role ?? null;
-  const myMember = group.members.find((m) => m.userId === dbUser.id);
+  const myMember = members.find((m) => m.userId === dbUser.id);
   const permissions = {
     canEdit: canEditGroup({ group, userId: dbUser.id, orgRole }).ok,
     canViewBilling: canViewBilling({ group, userId: dbUser.id, orgRole }).ok,
     canResumePayment: canResumePayment({ group, userId: dbUser.id }).ok,
   };
-
-  // Materialize members[] for organizer dashboard (already loaded above).
-  const members = group.members.map((m) => ({
-    userId: m.user.id,
-    name: m.user.name,
-    avatar: m.user.avatar,
-    country: m.user.country,
-    xp: m.user.xp,
-    role: m.role,
-    joinedAt: m.joinedAt.toISOString(),
-  }));
 
   return NextResponse.json({
     group: {

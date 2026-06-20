@@ -7,7 +7,7 @@ import { PLANS, isPublicPlan, resolveLimits } from "@/lib/plans";
 import type { GroupType, PlanType } from "@prisma/client";
 import { log } from "@/lib/log";
 import { trackServer } from "@/lib/analytics-server";
-import { readGroupsCache, writeGroupsCache, invalidateGroupsCache } from "@/lib/dashboard-cache";
+import { readGroupsCache, writeGroupsCache, invalidateGroupsCache, readGroupMembersCache, writeGroupMembersCache, type CachedMember } from "@/lib/dashboard-cache";
 
 export async function GET(request: NextRequest) {
   const { user } = await getAuthUser(request);
@@ -69,6 +69,37 @@ export async function GET(request: NextRequest) {
 
   const payload = { groups };
   await writeGroupsCache(dbUser.id, payload);
+
+  // Proactively warm the members cache for all groups so the first tap on any
+  // group detail is fast. One batch DB query for all cold groups.
+  void (async () => {
+    try {
+      const groupIds = groups.map((g) => g.id);
+      const cacheStatuses = await Promise.all(groupIds.map((gId) => readGroupMembersCache(gId)));
+      const coldIds = groupIds.filter((_, i) => !cacheStatuses[i]);
+      if (coldIds.length === 0) return;
+
+      const allMembers = await prisma.groupMember.findMany({
+        where: { groupId: { in: coldIds } },
+        include: { user: { select: { id: true, name: true, avatar: true, country: true, xp: true } } },
+      });
+
+      const byGroup: Record<string, CachedMember[]> = {};
+      for (const m of allMembers) {
+        (byGroup[m.groupId] ??= []).push({
+          userId: m.userId,
+          name: m.user.name,
+          avatar: m.user.avatar,
+          country: m.user.country,
+          xp: m.user.xp,
+          role: m.role,
+          joinedAt: m.joinedAt.toISOString(),
+        });
+      }
+      await Promise.all(Object.entries(byGroup).map(([gId, mems]) => writeGroupMembersCache(gId, mems)));
+    } catch { /* best-effort, never block the response */ }
+  })();
+
   return NextResponse.json(payload);
 }
 

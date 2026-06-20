@@ -105,6 +105,46 @@ export async function invalidateGroupsCache(userId: string): Promise<void> {
   } catch { /* swallow */ }
 }
 
+// ── Group members cache ────────────────────────────────────────────────────
+// Members list rarely changes (only on join/leave). Caching it lets the
+// group detail route skip the heavy members+user JOIN on every request.
+// 5min TTL; invalidated explicitly on join (and should be on leave).
+const GROUP_MEMBERS_PREFIX = "group-members:v1:";
+const GROUP_MEMBERS_TTL = 5 * 60;
+
+export type CachedMember = {
+  userId: string;
+  name: string;
+  avatar: string;
+  country: string;
+  xp: number;
+  role: string;
+  joinedAt: string;
+};
+
+export async function readGroupMembersCache(groupId: string): Promise<CachedMember[] | null> {
+  if (!redis) return null;
+  try {
+    return await redis.get<CachedMember[]>(`${GROUP_MEMBERS_PREFIX}${groupId}`) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function writeGroupMembersCache(groupId: string, members: CachedMember[]): Promise<void> {
+  if (!redis) return;
+  try {
+    await redis.set(`${GROUP_MEMBERS_PREFIX}${groupId}`, members, { ex: GROUP_MEMBERS_TTL });
+  } catch { /* swallow */ }
+}
+
+export async function invalidateGroupMembersCache(groupId: string): Promise<void> {
+  if (!redis) return;
+  try {
+    await redis.del(`${GROUP_MEMBERS_PREFIX}${groupId}`);
+  } catch { /* swallow */ }
+}
+
 // ── Group detail cache ─────────────────────────────────────────────────────
 // Caches { ranking, availableDates } per group+date. Per-user fields
 // (myRole, permissions) are added fresh on every request since they're cheap.
