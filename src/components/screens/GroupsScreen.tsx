@@ -42,9 +42,19 @@ export default function GroupsScreen() {
   const apiGroups = useMemo(() => dashData?.groups ?? [], [dashData]);
   const { config } = usePublicConfig();
   const realMoneyEnabled = config.flags.enableRealMoneyPools;
-  const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
+  const [selectedGroup, setSelectedGroup] = useState<string | null>(() => {
+    try { return typeof window !== "undefined" ? window.localStorage.getItem("ap_selected_group") : null; } catch { return null; }
+  });
   const [rankingDate, setRankingDate] = useState<string | null>(null);
   const { detail, loading: detailLoading, error: detailError } = useGroupDetail(selectedGroup, rankingDate);
+
+  // Persist selectedGroup so reload restores the open group instantly.
+  useEffect(() => {
+    try {
+      if (selectedGroup) window.localStorage.setItem("ap_selected_group", selectedGroup);
+      else window.localStorage.removeItem("ap_selected_group");
+    } catch { /* quota */ }
+  }, [selectedGroup]);
 
   type UpcomingMatchResp = {
     match: { id: string; teamAName: string; teamBName: string; teamAFlag: string; teamBFlag: string; teamACode: string; teamBCode: string; matchDate: string } | null;
