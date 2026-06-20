@@ -1,21 +1,11 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { motion } from "framer-motion";
 import { Loader2 } from "lucide-react";
 import { useApp } from "@/lib/store";
 import { useRanking } from "@/lib/hooks";
 import { getRankingContent } from "@/lib/share";
 import ShareButton from "@/components/ShareButton";
-
-const stagger = {
-  hidden: {},
-  show: { transition: { staggerChildren: 0.05 } },
-};
-const fadeUp = {
-  hidden: { opacity: 0, y: 14 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.3 } },
-} as const;
 
 type RankFilter = "global" | "country" | "weekly";
 
@@ -52,29 +42,29 @@ export default function RankingScreen() {
 
   if (error) {
     return (
-      <motion.div className="space-y-5 pb-6" variants={stagger} initial="hidden" animate="show">
-        <motion.div variants={fadeUp} className="pt-2">
+      <div className="space-y-5 pb-6">
+        <div className="pt-2">
           <h1 className="font-display text-xl font-bold tracking-widest">RANKING</h1>
-        </motion.div>
+        </div>
         <div className="text-center py-20">
           <p className="text-text-secondary mb-4">No se pudo cargar el ranking</p>
           <button onClick={refetch} className="text-primary text-sm font-semibold font-display tracking-wider">REINTENTAR</button>
         </div>
-      </motion.div>
+      </div>
     );
   }
 
   if (ranking.length === 0) {
     return (
-      <motion.div className="space-y-5 pb-6" variants={stagger} initial="hidden" animate="show">
-        <motion.div variants={fadeUp} className="pt-2">
+      <div className="space-y-5 pb-6">
+        <div className="pt-2">
           <h1 className="font-display text-xl font-bold tracking-widest">RANKING</h1>
-        </motion.div>
+        </div>
         <div className="text-center py-20">
           <div className="text-4xl mb-3">🏆</div>
           <p className="text-text-muted">Todavia no hay ranking. Predeci partidos para aparecer!</p>
         </div>
-      </motion.div>
+      </div>
     );
   }
 
@@ -82,14 +72,14 @@ export default function RankingScreen() {
   const rest = ranking.slice(3);
 
   return (
-    <motion.div className="space-y-5 pb-6" variants={stagger} initial="hidden" animate="show">
-      <motion.div variants={fadeUp} className="pt-2">
+    <div className="space-y-5 pb-6">
+      <div className="pt-2">
         <h1 className="font-display text-xl font-bold tracking-widest">RANKING</h1>
         <p className="mt-0.5 text-base text-text-secondary">{totalPlayers > 0 ? totalPlayers.toLocaleString() : "0"} jugadores</p>
-      </motion.div>
+      </div>
 
       {/* Filters */}
-      <motion.div variants={fadeUp} className="flex gap-2">
+      <div className="flex gap-2">
         <button
           onClick={() => setFilter("global")}
           className="rounded-full px-4 py-1.5 font-display text-xs font-bold tracking-wider transition-all bg-primary text-bg-primary shadow-[0_0_12px_rgba(16,185,129,0.3)]"
@@ -110,11 +100,11 @@ export default function RankingScreen() {
         >
           📅 SEMANAL
         </button>
-      </motion.div>
+      </div>
 
       {/* Top 3 podium */}
       {top3.length >= 3 && (
-        <motion.div variants={fadeUp} className="flex items-end justify-center gap-3 md:gap-6 py-4">
+        <div className="flex items-end justify-center gap-3 md:gap-6 py-4">
           {/* 2nd place */}
           <div className="flex flex-col items-center">
             <div className="text-2xl mb-1">{top3[1].avatar}</div>
@@ -150,15 +140,14 @@ export default function RankingScreen() {
               <div className="font-display text-sm font-bold text-amber-600">{top3[2].points}</div>
             </div>
           </div>
-        </motion.div>
+        </div>
       )}
 
       {/* Rest of ranking */}
-      <motion.div className="space-y-1.5" variants={stagger} initial="hidden" animate="show">
+      <div className="space-y-1.5">
         {rest.map((player) => (
-          <motion.div
+          <div
             key={player.position}
-            variants={fadeUp}
             className="flex items-center gap-3 rounded-xl border border-border-default bg-bg-surface p-3"
           >
             <span className="w-7 text-center font-display text-sm font-bold text-text-muted">
@@ -175,12 +164,12 @@ export default function RankingScreen() {
               <div className="font-display text-base font-bold">{player.points}</div>
               <div className="text-[10px] text-text-muted">pts</div>
             </div>
-          </motion.div>
+          </div>
         ))}
-      </motion.div>
+      </div>
 
       {/* Current user position */}
-      <motion.div variants={fadeUp}>
+      <div>
         <div className="text-xs font-display tracking-widest text-text-muted mb-2 text-center">
           — TU POSICION —
         </div>
@@ -202,7 +191,7 @@ export default function RankingScreen() {
             variant="icon"
           />
         </div>
-      </motion.div>
-    </motion.div>
+      </div>
+    </div>
   );
 }

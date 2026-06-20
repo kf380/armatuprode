@@ -1054,8 +1054,8 @@ export default function GroupsScreen() {
     );
   }
 
-  // Groups list view
-  if (groupsLoading) {
+  // Groups list view — show spinner only on cold start (no cached data yet)
+  if (groupsLoading && !dashData) {
     return (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="animate-spin text-primary" size={32} />
@@ -1064,13 +1064,13 @@ export default function GroupsScreen() {
   }
 
   return (
-    <motion.div className="space-y-5 pb-6" variants={stagger} initial="hidden" animate="show">
+    <div className="space-y-5 pb-6">
       {bannerError && (
         <div className="rounded-xl border border-danger/40 bg-danger/10 px-4 py-3 text-xs text-danger">
           {bannerError}
         </div>
       )}
-      <motion.div variants={fadeUp} className="flex items-center justify-between pt-2">
+      <div className="flex items-center justify-between pt-2">
         <div>
           <h1 className="font-display text-xl font-bold tracking-widest">MIS GRUPOS</h1>
           <p className="mt-0.5 text-base text-text-secondary">{displayGroups.length} grupos activos</p>
@@ -1081,13 +1081,12 @@ export default function GroupsScreen() {
         >
           <Plus size={14} /> CREAR
         </button>
-      </motion.div>
+      </div>
 
       <div className="space-y-3 md:grid md:grid-cols-2 md:gap-4 md:space-y-0">
         {displayGroups.map((group) => (
-          <motion.button
+          <button
             key={group.id}
-            variants={fadeUp}
             onClick={() => setSelectedGroup(group.id)}
             className="w-full rounded-xl border border-border-default bg-bg-surface p-4 text-left transition-all hover:border-primary/20 hover:bg-bg-surface-hover active:scale-[0.99]"
           >
@@ -1106,7 +1105,7 @@ export default function GroupsScreen() {
                 Pozo: ${group.poolAmount.toLocaleString()} {group.currency}
               </div>
             )}
-          </motion.button>
+          </button>
         ))}
       </div>
 
@@ -1193,6 +1192,6 @@ export default function GroupsScreen() {
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.div>
+    </div>
   );
 }
