@@ -73,17 +73,29 @@ export async function GET(
     ranking = cached.ranking;
     availableDates = cached.availableDates;
   } else {
-    const [predictions, dateRows] = await Promise.all([
-      prisma.prediction.findMany({
-        where: {
-          userId: { in: memberIds },
-          match: {
-            tournamentId: group.tournamentId,
-            ...(dayWindow ? { matchDate: dayWindow, status: "FINISHED" } : {}),
-          },
-        },
-        select: { userId: true, points: true },
-      }),
+    // Use GROUP BY aggregation in Postgres — faster than fetching all rows +
+    // summing in JS, especially for groups with many members and many matches.
+    const [pointsRows, dateRows] = await Promise.all([
+      dayWindow
+        ? prisma.$queryRaw<{ userId: string; points: number }[]>`
+            SELECT p."userId", COALESCE(SUM(p."points"), 0)::int AS points
+            FROM "Prediction" p
+            JOIN "Match" m ON p."matchId" = m.id
+            WHERE m."tournamentId" = ${group.tournamentId}
+              AND m."status" = 'FINISHED'
+              AND m."matchDate" >= ${dayWindow.gte}
+              AND m."matchDate" <= ${dayWindow.lte}
+              AND p."userId" = ANY(${memberIds})
+            GROUP BY p."userId"
+          `
+        : prisma.$queryRaw<{ userId: string; points: number }[]>`
+            SELECT p."userId", COALESCE(SUM(p."points"), 0)::int AS points
+            FROM "Prediction" p
+            JOIN "Match" m ON p."matchId" = m.id
+            WHERE m."tournamentId" = ${group.tournamentId}
+              AND p."userId" = ANY(${memberIds})
+            GROUP BY p."userId"
+          `,
       prisma.$queryRaw<{ date: string }[]>`
         SELECT DISTINCT TO_CHAR(("matchDate" AT TIME ZONE 'UTC') - INTERVAL '3 hours', 'YYYY-MM-DD') AS date
         FROM "Match"
@@ -93,8 +105,8 @@ export async function GET(
     ]);
 
     const pointsByUser: Record<string, number> = {};
-    for (const p of predictions) {
-      pointsByUser[p.userId] = (pointsByUser[p.userId] || 0) + p.points;
+    for (const r of pointsRows) {
+      pointsByUser[r.userId] = r.points;
     }
 
     ranking = group.members
@@ -103,7 +115,7 @@ export async function GET(
         name: m.user.name,
         avatar: m.user.avatar,
         country: m.user.country,
-        points: pointsByUser[m.userId] || 0,
+        points: pointsByUser[m.userId] ?? 0,
         role: m.role,
       }))
       .sort((a, b) => b.points - a.points);

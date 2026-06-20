@@ -124,7 +124,11 @@ export async function readGroupDetailCache<T>(groupId: string, date: string | nu
 export async function writeGroupDetailCache<T>(groupId: string, date: string | null, data: T): Promise<void> {
   if (!redis) return;
   try {
-    await redis.set(`${GROUP_DETAIL_PREFIX}${groupId}:${date ?? "total"}`, data, { ex: GROUP_DETAIL_TTL });
+    // Historical date rankings never change once all matches in that day are
+    // finished — use a long TTL so switching between dates is instant after
+    // first load. "total" (live ranking) stays short to reflect scoring.
+    const ttl = date ? 24 * 60 * 60 : GROUP_DETAIL_TTL;
+    await redis.set(`${GROUP_DETAIL_PREFIX}${groupId}:${date ?? "total"}`, data, { ex: ttl });
   } catch { /* swallow */ }
 }
 
