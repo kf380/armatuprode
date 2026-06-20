@@ -477,36 +477,53 @@ export function useGroupDetail(id: string | null, date?: string | null) {
   const [loading, setLoading] = useState(!cached && !!id);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchDetail = useCallback(async (groupId: string, filterDate?: string | null) => {
+  const fetchDetail = useCallback(async (groupId: string, filterDate?: string | null, silent = false) => {
     try {
-      setDetail((prev) => { if (!prev) setLoading(true); return prev; });
+      if (!silent) setDetail((prev) => { if (!prev) setLoading(true); return prev; });
       const url = filterDate
         ? `/api/groups/${groupId}?date=${encodeURIComponent(filterDate)}`
         : `/api/groups/${groupId}`;
       const res = await authFetch(url);
       if (!res.ok) throw new Error("Failed to fetch group detail");
       const data: GroupDetail = await res.json();
-      setDetail(data);
-      setError(null);
+      if (!silent) { setDetail(data); setError(null); }
       writeGroupDetailLocalCache(groupId, filterDate ?? null, data);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Error");
+      if (!silent) setError(e instanceof Error ? e.message : "Error");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [authFetch]);
 
   useEffect(() => {
-    if (id) {
-      const c = readGroupDetailLocalCache(id, date ?? null);
-      setDetail(c ?? null);
-      setLoading(!c);
-      fetchDetail(id, date ?? null);
-    } else {
-      setDetail(null);
-      setLoading(false);
-    }
-  }, [id, date, fetchDetail]);
+    if (!id) { setDetail(null); setLoading(false); return; }
+
+    const c = readGroupDetailLocalCache(id, date ?? null);
+    setDetail(c ?? null);
+    setLoading(!c);
+
+    // Historical dates (date != null) are immutable once scored — skip refetch
+    // if localStorage has a valid entry. Only the total ranking (date=null)
+    // needs revalidation since live scores change it.
+    if (date && c) return;
+
+    fetchDetail(id, date ?? null).then(() => {
+      // After loading total ranking, silently prefetch the last 3 available
+      // dates so switching between them is instant.
+      if (!date) {
+        const detail = readGroupDetailLocalCache(id, null);
+        const dates = detail?.availableDates ?? [];
+        const recent = dates.slice(-3);
+        recent.forEach((d, i) => {
+          const already = readGroupDetailLocalCache(id, d);
+          if (!already) {
+            setTimeout(() => fetchDetail(id, d, true), (i + 1) * 600);
+          }
+        });
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, date]);
 
   return { detail, loading, error, refetch: () => id && fetchDetail(id, date ?? null) };
 }
