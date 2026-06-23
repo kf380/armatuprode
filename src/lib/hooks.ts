@@ -1642,3 +1642,99 @@ export function useResumeGroupPayment() {
 
   return { resume };
 }
+
+// ===========================================================================
+// Organization detail + org groups (for /org/[id] admin panel)
+// ===========================================================================
+
+export function useOrganizationDetail(orgId: string | null) {
+  const { authFetch } = useApp();
+  const [org, setOrg] = useState<ApiOrganizationDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchOrg = useCallback(async () => {
+    if (!orgId) return;
+    try {
+      setLoading(true);
+      const res = await authFetch(`/api/organizations/${orgId}`);
+      if (!res.ok) throw new Error("No se pudo cargar la organización");
+      const data = await res.json();
+      setOrg(data.organization);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error");
+    } finally {
+      setLoading(false);
+    }
+  }, [authFetch, orgId]);
+
+  useEffect(() => {
+    fetchOrg();
+  }, [fetchOrg]);
+
+  return { org, loading, error, refetch: fetchOrg };
+}
+
+export interface ApiOrgGroup {
+  id: string;
+  name: string;
+  emoji: string;
+  status: ApiGroupStatus;
+  planType: ApiPlanType;
+  memberCount: number;
+  inviteCode: string;
+  createdAt: string;
+}
+
+export function useOrgGroups(orgId: string | null) {
+  const { authFetch } = useApp();
+  const [groups, setGroups] = useState<ApiOrgGroup[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchGroups = useCallback(async () => {
+    if (!orgId) return;
+    try {
+      setLoading(true);
+      const res = await authFetch(`/api/organizations/${orgId}/groups`);
+      if (!res.ok) throw new Error("No se pudieron cargar los grupos");
+      const data = await res.json();
+      setGroups(data.groups || []);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error");
+    } finally {
+      setLoading(false);
+    }
+  }, [authFetch, orgId]);
+
+  useEffect(() => {
+    fetchGroups();
+  }, [fetchGroups]);
+
+  return { groups, loading, error, refetch: fetchGroups };
+}
+
+export function useUpdateOrganization() {
+  const { authFetch } = useApp();
+
+  const updateOrg = useCallback(
+    async (id: string, data: { name?: string; logoUrl?: string | null; description?: string | null }) => {
+      const res = await authFetch(`/api/organizations/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.error || "No se pudo actualizar la organización");
+      }
+      const json = await res.json();
+      return json.organization as ApiOrganization;
+    },
+    [authFetch],
+  );
+
+  return { updateOrg };
+}
