@@ -9,11 +9,18 @@ import { readPendingJoinCode } from "@/lib/join-code";
 
 function buildAuthCallback(): string {
   const origin = window.location.origin;
-  const joinFromUrl = new URLSearchParams(window.location.search).get("join");
+  const params = new URLSearchParams(window.location.search);
+  const joinFromUrl = params.get("join");
   const joinCode = joinFromUrl || readPendingJoinCode();
-  if (!joinCode) return `${origin}/api/auth/callback`;
-  const next = `/?join=${encodeURIComponent(joinCode)}`;
-  return `${origin}/api/auth/callback?next=${encodeURIComponent(next)}`;
+  if (joinCode) {
+    const next = `/?join=${encodeURIComponent(joinCode)}`;
+    return `${origin}/api/auth/callback?next=${encodeURIComponent(next)}`;
+  }
+  const nextParam = params.get("next");
+  if (nextParam) {
+    return `${origin}/api/auth/callback?next=${encodeURIComponent(nextParam)}`;
+  }
+  return `${origin}/api/auth/callback`;
 }
 
 // Map raw Supabase error messages to user-friendly Spanish copy. Falls back
