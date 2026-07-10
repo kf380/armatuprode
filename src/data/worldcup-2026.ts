@@ -311,19 +311,20 @@ const FIXTURES: FixtureRow[] = [
   [87, null, "1K", "3-DEIJL",   22, 21, 30, "TOR"],
   [88, null, "2D", "2G",        22, 14, 0, "ATL"],
   // ---- ROUND OF 16 (Sat 4 Jul → Tue 7 Jul) ----
-  [89, null, "W74", "W77",      23, 17, 0, "BOS"],
+  // Corrected bracket: official draw placed W74 vs W85, W77 vs W80, W79 vs W82, W81 vs W87
+  [89, null, "W74", "W85",      23, 17, 0, "BOS"],
   [90, null, "W73", "W75",      23, 13, 0, "MEX"],
   [91, null, "W76", "W78",      24, 16, 0, "MIA"],
-  [92, null, "W79", "W80",      24, 20, 0, "DAL"],
+  [92, null, "W77", "W80",      24, 20, 0, "DAL"],
   [93, null, "W83", "W84",      25, 15, 0, "ATL"],
-  [94, null, "W81", "W82",      25, 20, 0, "LAX"],
+  [94, null, "W79", "W82",      25, 20, 0, "LAX"],
   [95, null, "W86", "W88",      26, 12, 0, "SEA"],
-  [96, null, "W85", "W87",      26, 16, 0, "KAN"],
-  // ---- QUARTER-FINALS (Thu 9 → Sun 12 Jul) ----
+  [96, null, "W81", "W87",      26, 16, 0, "KAN"],
+  // ---- QUARTER-FINALS (Thu 9 → Sat 11 Jul) ----
   [97, null, "W89", "W90",      28, 16, 0, "BOS"],
   [98, null, "W93", "W94",      29, 15, 0, "DAL"],
   [99, null, "W91", "W92",      30, 17, 0, "KAN"],
-  [100, null, "W95", "W96",     31, 21, 0, "LAX"],
+  [100, null, "W95", "W96",     30, 21, 0, "LAX"],
   // ---- SEMI-FINALS (Tue 14 → Wed 15 Jul) ----
   [101, null, "W97", "W98",     33, 15, 0, "ATL"],
   [102, null, "W99", "W100",    34, 15, 0, "DAL"],
